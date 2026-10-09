@@ -1,0 +1,70 @@
+{
+  "status": "implemented-initial-adapter",
+  "publicLocale": "en",
+  "publicBasePath": "/explorer",
+  "network": "test",
+  "addressPrefix": "trq1",
+  "rpcExposure": "server-only",
+  "source": "https://github.com/danifest751/requant/blob/aad4772/crates/node/src/rpc.rs",
+  "allowedNodeMethods": ["getinfo", "getblock", "gettx", "history", "utxos"],
+  "forbiddenPublicMethods": [
+    "getwork",
+    "submitwork",
+    "sendtx",
+    "addpeer",
+    "getpeerinfo",
+    "peers"
+  ],
+  "amountEncoding": "decimal-string-of-integer-atoms",
+  "rateUnit": "tickets/s",
+  "peerCountScope": "observed-node",
+  "snapshotFields": [
+    "network",
+    "height",
+    "tip",
+    "latestBlockTime",
+    "observedAt",
+    "stale",
+    "estimatedTicketsPerSecond",
+    "rateWindow"
+  ],
+  "gaps": [
+    "Address history is limited to the newest 100 records; the node does not expose a pagination cursor.",
+    "Historical metrics begin at explorer deployment and use a 120-block estimate window.",
+    "Block hash lookup becomes available as the local canonical index catches up. Known orphan blocks are retained."
+  ],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/explorer/api/overview",
+      "source": "getinfo plus cached recent blocks"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/blocks",
+      "source": "bounded cached getblock reads",
+      "pagination": "before-height, maximum 20 blocks"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/blocks/{heightOrHash}",
+      "source": "getblock by height; hash lookup requires an adapter index"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/transactions/{txid}",
+      "source": "gettx"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/addresses/{address}",
+      "source": "validated address decoding, history and utxos"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/metrics",
+      "source": "durable time-series collector",
+      "pagination": "bounded-time-range"
+    }
+  ]
+}

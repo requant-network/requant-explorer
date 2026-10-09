@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.codegraph
+.env*
+data
+design
+test
+*.tsbuildinfo

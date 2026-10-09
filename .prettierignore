@@ -1,0 +1,6 @@
+node_modules
+.next
+.codegraph
+data
+design
+package-lock.json
