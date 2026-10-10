@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { short, amount, date } from './format.mjs';
-export function Header() {
+export function Header({ active = 'explorer' }: { active?: string }) {
   return (
     <header className="header">
       <a className="brand" href="/">
@@ -15,8 +15,11 @@ export function Header() {
       <nav aria-label="Main navigation">
         <a href="/research">Research</a>
         <a href="/roadmap">Roadmap</a>
-        <Link className="active" href="/">
+        <Link className={active === 'explorer' ? 'active' : ''} href="/">
           Explorer
+        </Link>
+        <Link className={active === 'pool' ? 'active' : ''} href="/pool">
+          Pool
         </Link>
         <a href="/docs">Get Started ↗</a>
         <a className="wallet-link" href="/wallet/">

@@ -1482,3 +1482,129 @@ tbody tr:hover {
     flex-wrap: wrap;
   }
 }
+
+/* Mining pool (Signal tokens; shares the explorer's panels, cards and tables) */
+.state.failed {
+  background: #f2dcd6;
+  color: #8c2a12;
+}
+.pool-legend {
+  display: flex;
+  gap: 22px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pool-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 2px;
+  background: var(--accent);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.pool-swatch.network {
+  background: none;
+  border-top: 2px dashed rgba(32, 35, 31, 0.45);
+}
+.pool-start-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 34px;
+  padding: 26px;
+}
+.pool-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.pool-steps b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.pool-steps code,
+.pool-terms code {
+  font: 12px var(--mono);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+.pool-steps pre {
+  margin: 12px 0 0;
+  padding: 18px 20px;
+  background: var(--dark);
+  color: #f4f1e9;
+  border-radius: 6px;
+  font: 12px/1.75 var(--mono);
+  overflow-x: auto;
+  white-space: pre;
+}
+.pool-steps .actions {
+  margin-top: 12px;
+}
+.pool-terms h3 {
+  font-size: 15px;
+  margin: 0 0 14px;
+}
+.pool-terms .explorer-search {
+  margin-bottom: 20px;
+}
+.pool-terms .detail-grid {
+  grid-template-columns: 1fr 1fr;
+}
+.pool-bar {
+  display: inline-block;
+  width: 70px;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  vertical-align: middle;
+  overflow: hidden;
+}
+.pool-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.pool-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c9c4ba;
+}
+.pool-dot.on {
+  background: #3b8a52;
+}
+.pool-address {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+@media (max-width: 860px) {
+  .pool-start-body {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+  .pool-terms .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* pool cards: the explorer narrows its third card for issuance; here exact amounts are narrowed instead */
+.network-stats.pool-stats > div:nth-child(3) strong {
+  font-size: 31px;
+  line-height: normal;
+}
+.network-stats.pool-stats > div strong.exact {
+  font-size: clamp(18px, 1.7vw, 25px);
+  line-height: 1.25;
+}
+.pool-back {
+  margin: 0 0 22px;
+}
