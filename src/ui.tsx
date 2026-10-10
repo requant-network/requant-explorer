@@ -19,6 +19,9 @@ export function Header() {
           Explorer
         </Link>
         <a href="/docs">Get Started ↗</a>
+        <a className="wallet-link" href="/wallet/">
+          Open wallet ↗
+        </a>
       </nav>
       <span className="network-badge">
         <i />

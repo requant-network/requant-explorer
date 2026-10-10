@@ -1,11 +1,11 @@
 /* Requant Quantized Orange design system, version 1. */
 :root {
-  --bg: #f2efe8;
-  --ink: #171717;
-  --muted: #65635c;
-  --line: #c9c6be;
+  --bg: #f4f1e9;
+  --ink: #20231f;
+  --muted: #717786;
+  --line: #e4e4df;
   --accent: #ff5426;
-  --paper: #fbf9f4;
+  --paper: #ffffff;
   --dark: #1c1c1a;
   --olive: #777b62;
   --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -1148,7 +1148,7 @@ h3 {
 .rate-panel,
 .records-panel {
   border: 1px solid var(--line);
-  background: #f8f5ee;
+  background: #ffffff;
   border-radius: 4px;
   margin-bottom: 28px;
   overflow: hidden;
@@ -1315,7 +1315,7 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   margin: 32px 0;
-  background: #f8f5ee;
+  background: #ffffff;
 }
 .detail-grid > div {
   padding: 20px 26px;
@@ -1341,7 +1341,7 @@ tbody tr:hover {
   margin: 32px 0;
 }
 .transfer-panel {
-  background: #f8f5ee;
+  background: #ffffff;
   border: 1px solid var(--line);
   padding: 26px;
   border-radius: 4px;
