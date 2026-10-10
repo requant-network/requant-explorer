@@ -1,6 +1,9 @@
 import { parse } from 'lossless-json';
 const methods = new Set(['getinfo', 'getblock', 'gettx', 'history', 'utxos']);
-let active = 0;
+// the mining pool's public JSON-RPC: read-only statistics, no token
+const poolMethods = new Set(['poolstats', 'minerstats']);
+let active = 0,
+  poolActive = 0;
 export class RpcError extends Error {
   constructor(message, kind = 'unavailable') {
     super(message);
@@ -26,15 +29,46 @@ export async function rpc(method, params = []) {
     throw new RpcError('The explorer is busy. Please try again.');
   active++;
   try {
-    const response = await fetch(process.env.RPC_URL, {
+    return await call(
+      process.env.RPC_URL,
+      process.env.RPC_TOKEN,
+      method,
+      params,
+      16 * 1024 * 1024
+    );
+  } finally {
+    active--;
+  }
+}
+export async function poolRpc(method, params = []) {
+  if (!poolMethods.has(method))
+    throw new RpcError('Unsupported operation', 'invalid');
+  if (!process.env.POOL_RPC_URL)
+    throw new RpcError('The mining pool is not configured.');
+  if (poolActive >= 6)
+    throw new RpcError('The pool page is busy. Please try again.');
+  poolActive++;
+  try {
+    return await call(
+      process.env.POOL_RPC_URL,
+      '',
+      method,
+      params,
+      4 * 1024 * 1024
+    );
+  } finally {
+    poolActive--;
+  }
+}
+async function call(url, token, method, params, limit) {
+  try {
+    const response = await fetch(url, {
       method: 'POST',
       cache: 'no-store',
       signal: AbortSignal.timeout(6000),
       headers: {
         'Content-Type': 'application/json',
-        ...(process.env.RPC_TOKEN
-          ? { Authorization: `Bearer ${process.env.RPC_TOKEN}` }
-          : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ method, params }),
     });
@@ -47,7 +81,7 @@ export async function rpc(method, params = []) {
       const part = await reader.read();
       if (part.done) break;
       size += part.value.length;
-      if (size > 16 * 1024 * 1024) {
+      if (size > limit) {
         await reader.cancel();
         throw new RpcError('The node response exceeded the size limit.');
       }
@@ -60,14 +94,14 @@ export async function rpc(method, params = []) {
           'No matching record on the active chain or in the mempool.',
           'not-found'
         );
+      if (/not an address or key hash/.test(reply.error))
+        throw new RpcError('Use a Requant testnet address.', 'invalid');
       throw new RpcError('The node could not complete this request.');
     }
     return reply.result;
   } catch (error) {
     if (error instanceof RpcError) throw error;
     throw new RpcError('The node connection is temporarily unavailable.');
-  } finally {
-    active--;
   }
 }
 export function parseRpcForTest(text) {

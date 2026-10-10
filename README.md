@@ -14,6 +14,10 @@ The index advances in batches, checks the canonical branch and retains known orp
 
 Network rate sums expected ticket work `floor(2^256/(target+1))` over a window of up to 120 block intervals and divides by elapsed block time. It is an estimate in tickets/s. Peer counts refer to the observed node. A collector runs every 30 seconds and keeps 24 hours of measurements; the chart begins at deployment and needs two samples. Reorgs discard affected measurements.
 
+## Mining pool
+
+`/explorer/pool` shows the testnet mining pool: pool and network rate, found blocks, round effort, miners with their devices, balances and payouts; `/explorer/pool/miner/<address>` shows one miner. The data comes from the pool node's public JSON-RPC (`POOL_RPC_URL`), limited to its read-only `poolstats` and `minerstats` methods, with the same size and time bounds as the node adapter. The overview is cached for 15 seconds and a failed refresh keeps the last snapshot with a stale label. Atom values stay exact decimal strings; pool and network rates are estimates from shares and block targets, so their ratio can exceed 100% and is shown capped. `POOL_ENDPOINT` is the host and port miners connect to (default: the host of `POOL_RPC_URL`). Design screenshots are in `design/pool-2026-10-10`.
+
 ## Initial scope
 
 Search: block height, indexed block hash, transaction ID and testnet address. Details include block links, confirmations, work-claim fields, transaction inputs and outputs, UTXO balance categories and address history. Block lists support height-based pagination. Address history is limited to the newest 100 records because the reference node has no cursor API. Block transaction summaries display the first 40 transactions and list remaining IDs. Unknown orphan transaction bodies cannot be retrieved through the node's current active-chain RPC.
