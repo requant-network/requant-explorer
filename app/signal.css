@@ -508,3 +508,9 @@ tbody tr:hover {
     font-size: 32px;
   }
 }
+
+/* Give exact issuance values room without shortening their decimal precision. */
+.network-stats > div:nth-child(3) strong {
+  font-size: clamp(18px, 1.7vw, 25px);
+  line-height: 1.25;
+}
