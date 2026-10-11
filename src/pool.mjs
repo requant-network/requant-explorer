@@ -9,14 +9,9 @@ let snapshot,
   refreshing,
   lastAttempt = 0;
 
-// What miners type: POOL_ENDPOINT, else the host and port of POOL_RPC_URL.
+// Public miner endpoint is independent of the adapter's internal RPC URL.
 export function poolEndpoint() {
-  if (process.env.POOL_ENDPOINT) return process.env.POOL_ENDPOINT;
-  try {
-    return new URL(process.env.POOL_RPC_URL).host;
-  } catch {
-    return 'POOL_HOST:19340';
-  }
+  return process.env.POOL_ENDPOINT || 'pool.requant.network:19340';
 }
 
 export function shapePool(s) {

@@ -9,7 +9,9 @@ export function RateChart({
   series: { time: number; pool: number | null; network?: number | null }[];
   label: string;
 }) {
-  const rows = series.filter((s) => s.pool !== null);
+  const rows = series
+    .filter((s) => s.pool !== null)
+    .sort((a, b) => a.time - b.time);
   if (rows.length < 2)
     return (
       <div className="chart-empty">
@@ -19,15 +21,25 @@ export function RateChart({
     );
   const values = rows.flatMap((s) => [s.pool ?? 0, s.network ?? 0]),
     max = Math.max(...values, 1);
+  const start = rows[0].time,
+    span = rows.at(-1)!.time - start;
   const line = (key: 'pool' | 'network') =>
     rows
       .map(
         (s, i) =>
-          `${(i * 900) / (rows.length - 1)},${190 - ((s[key] ?? 0) / max) * 160}`
+          `${span ? ((s.time - start) * 900) / span : (i * 900) / (rows.length - 1)},${190 - ((s[key] ?? 0) / max) * 160}`
       )
       .join(' ');
   const hasNetwork = rows.some((s) => s.network);
-  const clock = (t: number) => new Date(t * 1000).toISOString().slice(11, 16);
+  const clock = (t: number) =>
+    new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'UTC',
+    }).format(new Date(t * 1000));
   return (
     <div className="chart">
       <svg
@@ -78,7 +90,7 @@ export function RateChart({
       </svg>
       <div className="chart-scale">
         <span>{clock(rows[0].time)} UTC</span>
-        <span>{rate(max)}</span>
+        <span>Peak {rate(max)}</span>
         <span>{clock(rows.at(-1)!.time)} UTC</span>
       </div>
       {hasNetwork && (
