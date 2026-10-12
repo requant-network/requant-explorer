@@ -62,7 +62,7 @@ export function Footer() {
       <div>
         <a href="/research">Research</a>
         <a href="/docs/security">Security</a>
-        <a href="https://github.com/danifest751/requant">Source ↗</a>
+        <a href="https://github.com/requant-network/requant">Source ↗</a>
       </div>
       <small>© {new Date().getUTCFullYear()} Requant</small>
     </footer>
