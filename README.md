@@ -27,3 +27,7 @@ The source contract is pinned in `contracts/node-capabilities.json`. Testnet epo
 ## Production
 
 The requant-web repository owns the shared Docker Compose and Caddy configuration. This application listens on internal port 3311 and has a persistent SQLite volume. The reference node is pinned to commit `aad4772` and uses an RPC token. RPC is published only on server loopback for SSH diagnostics; the application ports are not published.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). IBM Plex Sans is under the SIL Open Font License 1.1.
