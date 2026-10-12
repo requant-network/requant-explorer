@@ -199,6 +199,10 @@ export default async function Pool() {
             </section>
             <p className="pool-support">
               Need help?{' '}
+              <a href="/discord" target="_blank" rel="noopener noreferrer">
+                Ask in #mining on ReQuant Discord
+              </a>{' '}
+              or email{' '}
               <a href="mailto:support@requant.network">
                 support@requant.network
               </a>

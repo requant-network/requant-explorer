@@ -1,6 +1,6 @@
 # Requant explorer
 
-Private English-language testnet explorer, served at `/explorer` on requant.network. It shares the approved ivory, graphite and orange identity with requant-web.
+English-language testnet explorer, served at `/explorer` on requant.network. It shares the approved ivory, graphite and orange identity with requant-web.
 
 Use Node.js 24 or newer. Run `npm ci`, `npm run check`, `npm test`, then `npm run dev`. Copy `.env.example` to `.env.local` and configure RPC_URL and RPC_TOKEN. Open http://127.0.0.1:3311/explorer. Without a configured or reachable node, the interface displays unavailable data. It does not fabricate a live network.
 

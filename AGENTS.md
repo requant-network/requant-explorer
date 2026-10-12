@@ -1,6 +1,6 @@
 # Requant explorer
 
-- This private repository owns the public explorer and a constrained read-only data adapter.
+- This repository owns the public explorer and a constrained read-only data adapter.
 - All public UI, errors, metadata and accessibility text must be English. No Russian geographic branding or Russian UI.
 - Follow the approved original Requant design; do not reuse MagnetGate assets.
 - The initial public network is testnet. Display network identity and data freshness clearly. Mock data must say Demo data and never enter the live data source.
