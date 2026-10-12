@@ -1,34 +1,53 @@
 import Link from 'next/link';
 import { short, amount, date } from './format.mjs';
 export function Header({ active = 'explorer' }: { active?: string }) {
+  // the same links, in the same order, as the website's header
+  const site = [
+    { label: 'Technology', href: '/#technology' },
+    { label: 'Research', href: '/research' },
+    { label: 'Roadmap', href: '/roadmap' },
+    { label: 'Docs', href: '/docs' },
+    { label: 'MagnetGate', href: '/magnetgate' },
+  ];
+  const after = [
+    { label: 'Faucet', href: '/faucet' },
+    { label: 'Collaborate', href: '/partners' },
+  ];
   return (
     <header className="header">
       <a className="brand" href="/">
-        <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true">
+        <svg viewBox="0 0 40 40" width="35" height="35" aria-hidden="true">
           <path
             fill="currentColor"
             d="M3 3h26l8 9v11l-10 5 10 10H23L13 24h12l3-4v-7H11zM3 16h9v22H3z"
           />
         </svg>
-        Requant
+        <span>Requant</span>
       </a>
       <nav aria-label="Main navigation">
-        <a href="/research">Research</a>
-        <a href="/roadmap">Roadmap</a>
+        {site.map(({ label, href }) => (
+          <a key={label} href={href}>
+            {label}
+          </a>
+        ))}
         <Link className={active === 'explorer' ? 'active' : ''} href="/">
           Explorer
         </Link>
         <Link className={active === 'pool' ? 'active' : ''} href="/pool">
           Pool
         </Link>
-        <a href="/docs">Get Started ↗</a>
+        {after.map(({ label, href }) => (
+          <a key={label} href={href}>
+            {label}
+          </a>
+        ))}
         <a className="wallet-link" href="/wallet/">
           Open wallet ↗
         </a>
       </nav>
       <span className="network-badge">
         <i />
-        Testnet
+        TESTNET
       </span>
     </header>
   );
