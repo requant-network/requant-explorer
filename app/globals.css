@@ -1608,3 +1608,31 @@ tbody tr:hover {
 .pool-back {
   margin: 0 0 22px;
 }
+
+/* Keep the shared navigation readable as community links grow. */
+.header {
+  gap: clamp(12px, 1.8vw, 32px);
+}
+.header nav {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 clamp(10px, 1.2vw, 24px);
+}
+.header nav a {
+  white-space: nowrap;
+}
+.footer > div {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 10px;
+}
+@media (max-width: 700px) {
+  .header nav {
+    justify-content: flex-start;
+    gap: 4px 18px;
+  }
+  .footer > div {
+    justify-content: flex-start;
+  }
+}

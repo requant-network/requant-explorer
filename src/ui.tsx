@@ -12,6 +12,7 @@ export function Header({ active = 'explorer' }: { active?: string }) {
   const after = [
     { label: 'Faucet', href: '/faucet' },
     { label: 'Collaborate', href: '/partners' },
+    { label: 'Discord', href: '/discord' },
   ];
   return (
     <header className="header">
@@ -37,7 +38,12 @@ export function Header({ active = 'explorer' }: { active?: string }) {
           Pool
         </Link>
         {after.map(({ label, href }) => (
-          <a key={label} href={href}>
+          <a
+            key={label}
+            href={href}
+            target={href === '/discord' ? '_blank' : undefined}
+            rel={href === '/discord' ? 'noopener noreferrer' : undefined}
+          >
             {label}
           </a>
         ))}
@@ -61,6 +67,9 @@ export function Footer() {
       <span>Pre-alpha testnet · Coins have no value.</span>
       <div>
         <a href="/research">Research</a>
+        <a href="/discord" target="_blank" rel="noopener noreferrer">
+          Discord
+        </a>
         <a href="/docs/security">Security</a>
         <a href="https://github.com/requant-network/requant">Source ↗</a>
       </div>
