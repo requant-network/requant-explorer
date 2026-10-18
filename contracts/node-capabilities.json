@@ -18,6 +18,7 @@
   "amountEncoding": "decimal-string-of-integer-atoms",
   "rateUnit": "tickets/s",
   "peerCountScope": "observed-node",
+  "knownNodeScope": "observed-node-address-book-plus-itself",
   "snapshotFields": [
     "network",
     "height",

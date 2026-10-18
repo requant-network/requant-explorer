@@ -109,12 +109,12 @@ export default function Overview({ initial }: { initial: any }) {
           <small>Continuous issuance with tail emission</small>
         </div>
         <div>
-          <span>Observed node peers</span>
-          <strong>{connected ? data.peers : '—'}</strong>
+          <span>Known nodes</span>
+          <strong>{connected ? (data.knownNodes ?? data.peers) : '—'}</strong>
           <small>
             {connected
-              ? `${data.mempool} pending transactions`
-              : 'Local node connections'}
+              ? `${data.peers} connected to the observed node · ${data.mempool} pending transactions`
+              : 'Address book of the observed node'}
           </small>
         </div>
       </section>
@@ -231,7 +231,8 @@ export default function Overview({ initial }: { initial: any }) {
       </div>
       <div className="notice">
         Testnet coins have no value. Network rate is an estimate from block
-        targets and timestamps; peers describe the observed node.
+        targets and timestamps; known nodes are the observed node's address book
+        and the node itself, connections are its own peers.
       </div>
     </main>
   );

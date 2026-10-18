@@ -42,6 +42,7 @@ test('live snapshots, large balances, orphan status and cached outage state', as
         tip: block(2).id,
         issued_atoms: '18446744073709551615',
         peers: 3,
+        known_addresses: 5,
         mempool: 0,
         indexed_txs: 3,
         version: 'test',
@@ -71,6 +72,8 @@ test('live snapshots, large balances, orphan status and cached outage state', as
     const first = await overview();
     assert.equal(first.status, 'connected');
     assert.equal(first.issuedAtoms, '18446744073709551615');
+    assert.equal(first.knownNodes, 6);
+    assert.equal(first.peers, 3);
     assert.equal(first.indexHeight, 2);
     assert.equal(Object.getPrototypeOf(first.series[0]), Object.prototype);
     const address = await getAddress(encodeAddress(owner));

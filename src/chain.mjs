@@ -144,6 +144,9 @@ async function update() {
     tip: info.tip,
     issuedAtoms: info.issued_atoms,
     peers: Number(info.peers),
+    // the observed node's address book plus the node itself (older nodes do not report it)
+    knownNodes:
+      info.known_addresses == null ? null : Number(info.known_addresses) + 1,
     mempool: Number(info.mempool),
     indexedTransactions: Number(info.indexed_txs),
     estimatedTicketsPerSecond: measured,
