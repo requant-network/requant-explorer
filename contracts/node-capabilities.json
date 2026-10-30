@@ -26,12 +26,13 @@
     "latestBlockTime",
     "observedAt",
     "stale",
+    "stalled",
     "estimatedTicketsPerSecond",
     "rateWindow"
   ],
   "gaps": [
     "Address history is limited to the newest 100 records; the node does not expose a pagination cursor.",
-    "Historical metrics begin at explorer deployment and use a 120-block estimate window.",
+    "Historical metrics begin at explorer deployment and use a 120-block estimate window. Rates are unavailable after 20 minutes without a new block; stalled describes block recency, independently of RPC connectivity.",
     "Block hash lookup becomes available as the local canonical index catches up. Known orphan blocks are retained."
   ],
   "endpoints": [

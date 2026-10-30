@@ -5,6 +5,8 @@ export async function GET() {
     {
       status: data.status,
       observedAt: data.observedAt,
+      stalled: data.stalled ?? null,
+      latestBlockTime: data.latestBlockTime ?? null,
       unit: 'tickets/s',
       rateWindowBlocks: data.rateWindow || 0,
       series: data.series,

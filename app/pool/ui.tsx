@@ -99,7 +99,7 @@ export function RateChart({
             <i className="pool-swatch" /> Pool
           </span>
           <span>
-            <i className="pool-swatch network" /> Whole network
+            <i className="pool-swatch network" /> Network block-window estimate
           </span>
         </div>
       )}

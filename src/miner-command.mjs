@@ -1,6 +1,14 @@
-export function minerCommand({ endpoint, platform, payee = '', worker = '' }) {
+export function minerCommand({
+  endpoint,
+  platform,
+  backend = 'cuda',
+  payee = '',
+  worker = '',
+}) {
   if (!/^[a-z0-9.-]+:[0-9]{1,5}$/i.test(endpoint))
     throw new Error('Invalid pool endpoint configuration.');
+  if (backend !== 'cuda' && backend !== 'opencl')
+    throw new Error('Invalid mining backend.');
   const key = payee.trim();
   const name = worker.trim();
   const errors = {};
@@ -11,8 +19,8 @@ export function minerCommand({ endpoint, platform, payee = '', worker = '' }) {
     errors.worker = 'Use up to 32 letters, numbers, underscores or hyphens.';
   const executable = platform === 'linux' ? './cppminer' : '.\\cppminer.exe';
   return {
-    command: `${executable} --algo tnet --rpc ${endpoint} --payee ${key && !errors.payee ? key.toLowerCase() : 'YOUR_KEY_HASH'} --worker ${name && !errors.worker ? name : 'rig1'}`,
+    command: `${executable} --algo tnet${backend === 'opencl' ? ' --backend opencl' : ''} --rpc ${endpoint} --payee ${key && !errors.payee ? key.toLowerCase() : 'YOUR_KEY_HASH'} --worker ${name && !errors.worker ? name : 'rig1'}`,
     errors,
-    valid: Object.keys(errors).length === 0,
+    valid: Boolean(key) && Object.keys(errors).length === 0,
   };
 }

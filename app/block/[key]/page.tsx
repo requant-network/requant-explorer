@@ -43,9 +43,11 @@ export default async function BlockPage({
               ← Previous block
             </Link>
           )}
-          <Link className="button" href={'/block/' + (b.height + 1)}>
-            Next block →
-          </Link>
+          {b.confirmations > 1 && (
+            <Link className="button" href={'/block/' + (b.height + 1)}>
+              Next block →
+            </Link>
+          )}
         </div>
         <Details
           rows={[

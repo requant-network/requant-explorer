@@ -47,5 +47,5 @@ export function rate(value) {
     : new Intl.NumberFormat('en-US', {
         notation: 'compact',
         maximumFractionDigits: 2,
-      }).format(value) + ' tickets/s';
+      }).format(Math.max(0, value)) + ' tickets/s';
 }

@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { rpc, RpcError } from './rpc.mjs';
 import { encodeAddress, decodeAddress, hashPattern } from './format.mjs';
+const blockSilenceMs = 20 * 60_000;
 let database,
   refreshing,
   snapshot,
@@ -17,7 +18,14 @@ function db() {
   database.exec(`PRAGMA journal_mode=WAL;
     CREATE TABLE IF NOT EXISTS blocks(id TEXT PRIMARY KEY,height INTEGER NOT NULL,time INTEGER NOT NULL,data TEXT NOT NULL,active INTEGER NOT NULL);
     CREATE UNIQUE INDEX IF NOT EXISTS active_height ON blocks(height) WHERE active=1;
-    CREATE TABLE IF NOT EXISTS samples(time INTEGER PRIMARY KEY,tip TEXT NOT NULL,height INTEGER NOT NULL,rate REAL,peers INTEGER NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS samples(time INTEGER PRIMARY KEY,tip TEXT NOT NULL,height INTEGER NOT NULL,rate REAL,peers INTEGER NOT NULL,block_time INTEGER);`);
+  if (
+    !database
+      .prepare('PRAGMA table_info(samples)')
+      .all()
+      .some((column) => column.name === 'block_time')
+  )
+    database.exec('ALTER TABLE samples ADD COLUMN block_time INTEGER');
   return database;
 }
 export function reconcileIndex(database, ancestorHeight) {
@@ -111,8 +119,9 @@ async function update() {
     throw new RpcError(
       'The chain changed during this update. Refresh shortly.'
     );
-  const measured = estimatedRate(blocks),
-    now = Date.now();
+  const now = Date.now(),
+    stalled = now - Number(blocks[0].time) * 1000 > blockSilenceMs,
+    measured = stalled ? null : estimatedRate(blocks);
   const transactions = await Promise.all(
     blocks
       .slice(0, 8)
@@ -121,13 +130,16 @@ async function update() {
       .map((id) => getTransaction(id))
   );
   db()
-    .prepare('INSERT OR REPLACE INTO samples VALUES(?,?,?,?,?)')
+    .prepare(
+      'INSERT OR REPLACE INTO samples(time,tip,height,rate,peers,block_time) VALUES(?,?,?,?,?,?)'
+    )
     .run(
       Math.floor(now / 60000) * 60000,
       info.tip,
       height,
       measured,
-      Number(info.peers)
+      Number(info.peers),
+      Number(blocks[0].time)
     );
   db()
     .prepare('DELETE FROM samples WHERE time<?')
@@ -139,6 +151,7 @@ async function update() {
     status: 'connected',
     network: 'testnet',
     observedAt: now,
+    stalled,
     nodeVersion: info.version,
     height,
     tip: info.tip,
@@ -156,8 +169,12 @@ async function update() {
     transactions,
     indexHeight,
     series: db()
-      .prepare('SELECT time,rate FROM samples ORDER BY time')
-      .all()
+      .prepare(
+        `SELECT s.time, CASE WHEN s.time - COALESCE(s.block_time, b.time) * 1000 <= ?
+        THEN s.rate ELSE NULL END AS rate FROM samples s
+        LEFT JOIN blocks b ON b.id=s.tip ORDER BY s.time`
+      )
+      .all(blockSilenceMs)
       .map(({ time, rate }) => ({ time, rate })),
     stale: false,
   };
