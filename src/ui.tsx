@@ -7,7 +7,6 @@ export function Header({ active = 'explorer' }: { active?: string }) {
     { label: 'Research', href: '/research' },
     { label: 'Roadmap', href: '/roadmap' },
     { label: 'Docs', href: '/docs' },
-    { label: 'MagnetGate', href: '/magnetgate' },
   ];
   const after = [
     { label: 'Faucet', href: '/faucet' },
