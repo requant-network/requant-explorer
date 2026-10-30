@@ -1,6 +1,6 @@
 # Requant explorer
 
-English-language testnet explorer, served at `/explorer` on requant.network. It shares the approved ivory, graphite and orange identity with requant-web.
+Private English-language testnet explorer, served at `/explorer` on requant.network. It shares the approved ivory, graphite and orange identity with requant-web.
 
 Use Node.js 24 or newer. Run `npm ci`, `npm run check`, `npm test`, then `npm run dev`. Copy `.env.example` to `.env.local` and configure RPC_URL and RPC_TOKEN. Open http://127.0.0.1:3311/explorer. Without a configured or reachable node, the interface displays unavailable data. It does not fabricate a live network.
 
@@ -27,7 +27,3 @@ The source contract is pinned in `contracts/node-capabilities.json`. Testnet epo
 ## Production
 
 The requant-web repository owns the shared Docker Compose and Caddy configuration. This application listens on internal port 3311 and has a persistent SQLite volume. The reference node is pinned to commit `aad4772` and uses an RPC token. RPC is published only on server loopback for SSH diagnostics; the application ports are not published.
-
-## License
-
-Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). IBM Plex Sans is under the SIL Open Font License 1.1.

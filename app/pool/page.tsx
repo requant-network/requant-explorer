@@ -39,7 +39,11 @@ export default async function Pool() {
             }
           >
             <i />
-            {data.status === 'connected' ? 'Pool online' : 'Data stale'}
+            {data.status === 'connected'
+              ? data.devices === 0
+                ? 'Pool online · no active devices'
+                : 'Pool online'
+              : 'Data stale'}
           </span>
         </div>
         <nav className="pool-jump-links" aria-label="On this page">
@@ -125,7 +129,8 @@ export default async function Pool() {
                 </li>
                 <li>
                   <strong>Download and extract CPPminer.</strong> Use a
-                  supported NVIDIA GPU (Turing or newer).{' '}
+                  tensor-core NVIDIA GPU (Turing or newer), or an AMD / Intel
+                  GPU with OpenCL.{' '}
                   <a
                     href="https://github.com/danifest751/CPPminer/releases/latest"
                     className="text-link"
@@ -386,7 +391,9 @@ export default async function Pool() {
         </div>
         <div className="notice">
           Testnet coins have no value. Rates are estimates from submitted shares
-          and block targets; the pool may be reset with the testnet.
+          and block targets; the network line is a historical block-window
+          estimate, not live GPU telemetry. The pool may be reset with the
+          testnet.
         </div>
       </main>
       <Footer />

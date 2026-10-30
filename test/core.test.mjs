@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { amount, encodeAddress, decodeAddress } from '../src/format.mjs';
+import { amount, encodeAddress, decodeAddress, rate } from '../src/format.mjs';
 import { rpc, parseRpcForTest } from '../src/rpc.mjs';
 import { estimatedRate, reconcileIndex } from '../src/chain.mjs';
 import { readResponse } from '../src/api.mjs';
@@ -24,6 +24,9 @@ test('testnet address matches the published development-fund vector', () => {
   assert.throws(() => decodeAddress('rq' + address.slice(3)));
 });
 test('network rate derives work from each target, not GPU throughput', () => {
+  assert.equal(rate(null), 'Unavailable');
+  assert.equal(rate(-0), '0 tickets/s');
+  assert.equal(rate(-Number.MIN_VALUE), '0 tickets/s');
   const target = ((1n << 255n) - 1n).toString(16).padStart(64, '0');
   assert.equal(
     estimatedRate([

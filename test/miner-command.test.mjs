@@ -20,6 +20,11 @@ test('miner commands use the public domain and platform executable', () => {
   assert.ok(
     minerCommand({ endpoint: input.endpoint }).command.includes('YOUR_KEY_HASH')
   );
+  assert.equal(minerCommand({ endpoint: input.endpoint }).valid, false);
+  assert.equal(
+    minerCommand({ ...input, platform: 'linux', backend: 'opencl' }).command,
+    `./cppminer --algo tnet --backend opencl --rpc pool.requant.network:19340 --payee ${'ab'.repeat(32)} --worker rig_50-hx`
+  );
 });
 
 test('invalid addresses and shell syntax cannot enter a copied command', () => {
@@ -41,5 +46,11 @@ test('invalid addresses and shell syntax cannot enter a copied command', () => {
   }
   assert.throws(() =>
     minerCommand({ endpoint: 'pool.test:19340; echo secret' })
+  );
+  assert.throws(() =>
+    minerCommand({
+      endpoint: 'pool.test:19340',
+      backend: 'opencl; echo secret',
+    })
   );
 });

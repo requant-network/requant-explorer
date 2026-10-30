@@ -12,6 +12,7 @@ import { minerCommand } from '../../src/miner-command.mjs';
 
 export function MiningSetup({ endpoint }: { endpoint: string }) {
   const [platform, setPlatform] = useState('windows');
+  const [backend, setBackend] = useState('cuda');
   const [payee, setPayee] = useState('');
   const [worker, setWorker] = useState('rig1');
   const [copied, setCopied] = useState('');
@@ -19,6 +20,7 @@ export function MiningSetup({ endpoint }: { endpoint: string }) {
   const { command, errors, valid } = minerCommand({
     endpoint,
     platform,
+    backend,
     payee,
     worker,
   });
@@ -49,6 +51,21 @@ export function MiningSetup({ endpoint }: { endpoint: string }) {
               onChange={() => setPlatform(value)}
             />
             {value === 'windows' ? 'Windows' : 'Linux'}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="pool-platform">
+        <legend>GPU</legend>
+        {['cuda', 'opencl'].map((value) => (
+          <label key={value} className={backend === value ? 'selected' : ''}>
+            <input
+              type="radio"
+              name="backend"
+              value={value}
+              checked={backend === value}
+              onChange={() => setBackend(value)}
+            />
+            {value === 'cuda' ? 'NVIDIA · CUDA' : 'AMD / Intel · OpenCL'}
           </label>
         ))}
       </fieldset>

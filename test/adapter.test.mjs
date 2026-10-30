@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { overview, getBlock, getAddress } from '../src/chain.mjs';
 import { encodeAddress } from '../src/format.mjs';
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'requant-chain-test-'));
@@ -12,7 +13,10 @@ const target = ((1n << 255n) - 1n).toString(16).padStart(64, '0'),
   owner = hash(999);
 let fork = false,
   offline = false,
-  now = 1700000000000;
+  now = 1700000000000,
+  tipHeight = 2,
+  newBlockTime;
+const blockTime = now / 1000 - 120;
 const originalFetch = globalThis.fetch,
   originalNow = Date.now;
 function block(height) {
@@ -22,7 +26,7 @@ function block(height) {
   return {
     id: hash((fork && height === 2 ? 100 : 0) + height),
     height,
-    time: 1600000000 + height * 60,
+    time: height === 3 ? newBlockTime : blockTime + height * 60,
     target,
     txs: 1,
     txids: [hash(1000 + height)],
@@ -30,6 +34,13 @@ function block(height) {
   };
 }
 test('live snapshots, large balances, orphan status and cached outage state', async () => {
+  const legacy = new DatabaseSync(
+    join(process.env.DATA_DIR, 'explorer.sqlite')
+  );
+  legacy.exec(
+    'CREATE TABLE samples(time INTEGER PRIMARY KEY,tip TEXT NOT NULL,height INTEGER NOT NULL,rate REAL,peers INTEGER NOT NULL)'
+  );
+  legacy.close();
   Date.now = () => now;
   globalThis.fetch = async (_url, options) => {
     if (offline) throw new Error('Offline');
@@ -38,8 +49,8 @@ test('live snapshots, large balances, orphan status and cached outage state', as
     if (method === 'getinfo')
       result = {
         network: 'test',
-        height: 2,
-        tip: block(2).id,
+        height: tipHeight,
+        tip: block(tipHeight).id,
         issued_atoms: '18446744073709551615',
         peers: 3,
         known_addresses: 5,
@@ -71,6 +82,8 @@ test('live snapshots, large balances, orphan status and cached outage state', as
   try {
     const first = await overview();
     assert.equal(first.status, 'connected');
+    assert.equal(first.stalled, false);
+    assert.ok(first.estimatedTicketsPerSecond > 0);
     assert.equal(first.issuedAtoms, '18446744073709551615');
     assert.equal(first.knownNodes, 6);
     assert.equal(first.peers, 3);
@@ -87,6 +100,29 @@ test('live snapshots, large balances, orphan status and cached outage state', as
     assert.equal(orphan.active, false);
     assert.equal(orphan.confirmations, 0);
     assert.deepEqual(orphan.transactions, []);
+    now += 25 * 60_000;
+    const legacyTime = Math.floor(now / 60000) * 60000 - 60_000;
+    const database = new DatabaseSync(
+      join(process.env.DATA_DIR, 'explorer.sqlite')
+    );
+    database
+      .prepare(
+        'INSERT INTO samples(time,tip,height,rate,peers) VALUES(?,?,?,?,?)'
+      )
+      .run(legacyTime, next.tip, 2, 1337, 3);
+    database.close();
+    const paused = await overview();
+    assert.equal(paused.status, 'connected');
+    assert.equal(paused.stalled, true);
+    assert.equal(paused.estimatedTicketsPerSecond, null);
+    assert.equal(paused.series.at(-1).rate, null);
+    assert.equal(paused.series.find((s) => s.time === legacyTime).rate, null);
+    tipHeight = 3;
+    newBlockTime = now / 1000;
+    now += 16000;
+    const resumed = await overview();
+    assert.equal(resumed.stalled, false);
+    assert.ok(resumed.estimatedTicketsPerSecond > 0);
     offline = true;
     now += 16000;
     const failure = await overview();
@@ -95,9 +131,50 @@ test('live snapshots, large balances, orphan status and cached outage state', as
     const cached = await overview();
     assert.equal(cached.status, 'stale');
     assert.equal(cached.stale, true);
-    assert.equal(cached.observedAt, next.observedAt);
+    assert.equal(cached.observedAt, resumed.observedAt);
   } finally {
     globalThis.fetch = originalFetch;
     Date.now = originalNow;
+  }
+});
+
+test('fresh rates remain visible before the historical index reaches the tip', async () => {
+  const oldDirectory = process.env.DATA_DIR;
+  process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'requant-index-lag-test-'));
+  const currentHeight = 8040;
+  globalThis.fetch = async (_url, options) => {
+    const { method, params } = JSON.parse(options.body);
+    const result =
+      method === 'getinfo'
+        ? {
+            network: 'test',
+            height: currentHeight,
+            tip: hash(currentHeight),
+            issued_atoms: '123',
+            peers: 2,
+            mempool: 0,
+            indexed_txs: 0,
+            version: 'test',
+          }
+        : {
+            ...block(params[0]),
+            id: hash(params[0]),
+            txs: 0,
+            txids: [],
+            time:
+              Math.floor(Date.now() / 1000) - (currentHeight - params[0]) * 60,
+          };
+    return new Response(JSON.stringify({ result, error: null }));
+  };
+  try {
+    const { overview: catchingUp } = await import('../src/chain.mjs?index-lag');
+    const data = await catchingUp();
+    assert.equal(data.indexHeight, 63);
+    assert.equal(data.stalled, false);
+    assert.ok(data.estimatedTicketsPerSecond > 0);
+    assert.equal(data.series.at(-1).rate, data.estimatedTicketsPerSecond);
+  } finally {
+    process.env.DATA_DIR = oldDirectory;
+    globalThis.fetch = originalFetch;
   }
 });

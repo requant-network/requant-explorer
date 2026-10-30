@@ -30,14 +30,15 @@ export default function Overview({ initial }: { initial: any }) {
     };
   }, []);
   const connected = data.observedAt !== null,
-    series = data.series.filter((s: any) => s.rate !== null),
-    values = series.map((s: any) => s.rate),
+    series = data.series,
+    values = series.filter((s: any) => s.rate !== null).map((s: any) => s.rate),
     max = Math.max(...values, 1),
     min = Math.min(...values, 0);
   const points = series
-    .map(
-      (s: any, i: number) =>
-        `${(i * 900) / Math.max(1, series.length - 1)},${180 - ((s.rate - min) / (max - min || 1)) * 140}`
+    .map((s: any, i: number) =>
+      s.rate === null
+        ? ''
+        : `${i === 0 || series[i - 1].rate === null ? 'M' : 'L'}${((s.time - series[0].time) * 900) / Math.max(1, series.at(-1).time - series[0].time)},${180 - ((s.rate - min) / (max - min || 1)) * 140}`
     )
     .join(' ');
   return (
@@ -52,18 +53,28 @@ export default function Overview({ initial }: { initial: any }) {
         </div>
         <span
           className={
-            'connection ' + (data.status === 'connected' ? '' : 'disconnected')
+            'connection ' +
+            (data.status === 'connected' && !data.stalled ? '' : 'disconnected')
           }
         >
           <i />
           {data.status === 'connected'
-            ? 'Node connected'
+            ? data.stalled
+              ? 'Node connected · no recent blocks'
+              : 'Node connected'
             : data.status === 'stale'
               ? 'Data stale'
               : 'Node unavailable'}
         </span>
       </div>
       <Search />
+      {data.stalled && (
+        <div className="notice warning" role="status">
+          No new blocks observed for over 20 minutes. Testnet mining may be
+          inactive. Last block: {date(data.latestBlockTime)}. Confirmations and
+          payouts wait for new blocks.
+        </div>
+      )}
       {data.error && (
         <div className="notice warning" role="status">
           {data.error}
@@ -97,7 +108,9 @@ export default function Overview({ initial }: { initial: any }) {
           </strong>
           <small>
             {connected
-              ? `${data.rateWindow} block window`
+              ? data.stalled
+                ? 'Unavailable until new blocks arrive'
+                : `${data.rateWindow} block window`
               : 'Measured from block targets'}
           </small>
         </div>
@@ -128,7 +141,7 @@ export default function Overview({ initial }: { initial: any }) {
           </div>
           <span className="state">24 h history</span>
         </div>
-        {series.length > 1 ? (
+        {values.length > 1 ? (
           <div className="chart">
             <svg
               viewBox="0 0 900 200"
@@ -136,12 +149,6 @@ export default function Overview({ initial }: { initial: any }) {
               aria-label="Estimated ticket rate over the last 24 hours"
               preserveAspectRatio="none"
             >
-              <defs>
-                <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                  <stop stopColor="#ff5426" stopOpacity=".18" />
-                  <stop offset="1" stopColor="#ff5426" stopOpacity="0" />
-                </linearGradient>
-              </defs>
               {[40, 90, 140, 190].map((y) => (
                 <line
                   key={y}
@@ -153,12 +160,8 @@ export default function Overview({ initial }: { initial: any }) {
                   strokeDasharray="4 5"
                 />
               ))}
-              <polygon
-                fill="url(#area)"
-                points={'0,200 ' + points + ' 900,200'}
-              />
-              <polyline
-                points={points}
+              <path
+                d={points}
                 fill="none"
                 stroke="#ff5426"
                 strokeWidth="2"
@@ -179,9 +182,11 @@ export default function Overview({ initial }: { initial: any }) {
           <div className="chart-empty">
             <span className="chart-symbol">▥</span>
             <p>
-              {connected
-                ? 'Collecting network activity. The chart appears after two measurements.'
-                : 'Network activity appears when the node is connected.'}
+              {data.stalled
+                ? 'No recent blocks. A current network rate cannot be estimated.'
+                : connected
+                  ? 'Collecting network activity. The chart appears after two measurements.'
+                  : 'Network activity appears when the node is connected.'}
             </p>
           </div>
         )}
@@ -232,7 +237,8 @@ export default function Overview({ initial }: { initial: any }) {
       <div className="notice">
         Testnet coins have no value. Network rate is an estimate from block
         targets and timestamps; known nodes are the observed node's address book
-        and the node itself, connections are its own peers.
+        and the node itself, connections are its own peers. Gaps in the chart
+        mean the rate was unavailable.
       </div>
     </main>
   );
