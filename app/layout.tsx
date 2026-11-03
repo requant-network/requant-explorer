@@ -13,6 +13,8 @@ const plex = localFont({
   variable: '--font-plex',
   display: 'swap',
 });
+// Every page, the 404 included, renders per request: the CSP nonce (proxy.ts) needs it.
+export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   metadataBase: new URL('https://requant.network'),
   title: {

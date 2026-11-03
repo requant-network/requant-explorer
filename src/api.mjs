@@ -1,3 +1,5 @@
+import { RpcError } from './rpc.mjs';
+
 export async function readResponse(operation) {
   try {
     return Response.json(await operation(), {
@@ -5,7 +7,13 @@ export async function readResponse(operation) {
     });
   } catch (error) {
     return Response.json(
-      { error: error.message },
+      // the explorer's own texts only: SQLite and runtime errors can carry internals
+      {
+        error:
+          error instanceof RpcError
+            ? error.message
+            : 'The explorer could not complete this request.',
+      },
       {
         status:
           error.kind === 'not-found'

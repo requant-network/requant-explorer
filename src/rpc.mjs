@@ -1,9 +1,17 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { parse } from 'lossless-json';
 const methods = new Set(['getinfo', 'getblock', 'gettx', 'history', 'utxos']);
 // the mining pool's public JSON-RPC: read-only statistics, no token
 const poolMethods = new Set(['poolstats', 'minerstats']);
-let active = 0,
-  poolActive = 0;
+// The background snapshot (instrumentation.ts) runs inside `background`: visitors get 9 of the 12
+// node slots, so a flood of page requests can't stall the snapshot that every page reads. Kept on
+// globalThis: Next may bundle instrumentation and the routes apart, and the slots are one budget.
+const slots = (globalThis.__requantExplorerRpc ??= {
+  active: 0,
+  poolActive: 0,
+  background: new AsyncLocalStorage(),
+});
+export const background = slots.background;
 export class RpcError extends Error {
   constructor(message, kind = 'unavailable') {
     super(message);
@@ -25,9 +33,9 @@ export async function rpc(method, params = []) {
     throw new RpcError('Unsupported operation', 'invalid');
   if (!process.env.RPC_URL)
     throw new RpcError('The explorer node is not configured.');
-  if (active >= 12)
+  if (slots.active >= (background.getStore() ? 12 : 9))
     throw new RpcError('The explorer is busy. Please try again.');
-  active++;
+  slots.active++;
   try {
     return await call(
       process.env.RPC_URL,
@@ -37,7 +45,7 @@ export async function rpc(method, params = []) {
       16 * 1024 * 1024
     );
   } finally {
-    active--;
+    slots.active--;
   }
 }
 export async function poolRpc(method, params = []) {
@@ -45,9 +53,9 @@ export async function poolRpc(method, params = []) {
     throw new RpcError('Unsupported operation', 'invalid');
   if (!process.env.POOL_RPC_URL)
     throw new RpcError('The mining pool is not configured.');
-  if (poolActive >= 6)
+  if (slots.poolActive >= 6)
     throw new RpcError('The pool page is busy. Please try again.');
-  poolActive++;
+  slots.poolActive++;
   try {
     return await call(
       process.env.POOL_RPC_URL,
@@ -57,7 +65,7 @@ export async function poolRpc(method, params = []) {
       4 * 1024 * 1024
     );
   } finally {
-    poolActive--;
+    slots.poolActive--;
   }
 }
 async function call(url, token, method, params, limit) {
