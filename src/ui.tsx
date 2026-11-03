@@ -5,6 +5,7 @@ export function Header({ active = 'explorer' }: { active?: string }) {
   const site = [
     { label: 'Technology', href: '/#technology' },
     { label: 'Research', href: '/research' },
+    { label: 'Lab', href: 'https://lab.requant.network/lab/' },
     { label: 'Roadmap', href: '/roadmap' },
     { label: 'Docs', href: '/docs' },
   ];
