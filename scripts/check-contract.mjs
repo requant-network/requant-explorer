@@ -34,6 +34,7 @@ for (const method of contract.allowedNodeMethods) {
   );
 }
 for (const endpoint of contract.endpoints) assert.equal(endpoint.method, 'GET');
+assert.deepEqual(contract.allowedPoolMethods, ['poolstats', 'minerstats']);
 console.log(
   `Validated ${contract.endpoints.length} implemented read-only endpoints and testnet conventions.`
 );

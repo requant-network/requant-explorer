@@ -1,4 +1,9 @@
 import { RpcError } from './rpc.mjs';
+export function publicError(error) {
+  return error instanceof RpcError
+    ? error.message
+    : 'The explorer could not complete this request.';
+}
 
 export async function readResponse(operation) {
   try {
@@ -9,10 +14,7 @@ export async function readResponse(operation) {
     return Response.json(
       // the explorer's own texts only: SQLite and runtime errors can carry internals
       {
-        error:
-          error instanceof RpcError
-            ? error.message
-            : 'The explorer could not complete this request.',
+        error: publicError(error),
       },
       {
         status:

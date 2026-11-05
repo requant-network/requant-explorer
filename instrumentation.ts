@@ -12,5 +12,13 @@ export async function register() {
       void background.run(true, () => backfillTransactions().catch(() => {}));
     }, 3000);
     indexTimer.unref();
+    if (process.env.POOL_RPC_URL) {
+      const { collectPool } = await import('./src/pool.mjs');
+      const collect = () =>
+        void background.run(true, () => collectPool().catch(() => {}));
+      collect();
+      const poolTimer = setInterval(collect, 30000);
+      poolTimer.unref();
+    }
   }
 }

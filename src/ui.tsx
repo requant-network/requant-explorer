@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { short, amount, date } from './format.mjs';
 import { Time } from './workspace';
+import { publicError } from './api.mjs';
 export function Header({ active = 'explorer' }: { active?: string }) {
   // the same links, in the same order, as the website's header
   const site = [
@@ -245,9 +246,7 @@ export function Failure({ error }: { error: any }) {
               ? 'Check your search.'
               : 'Data unavailable.'}
         </h1>
-        <p className="page-lede">
-          {error.message || 'Please try again shortly.'}
-        </p>
+        <p className="page-lede">{publicError(error)}</p>
         <Search />
         <div className="notice">
           Requant testnet · No private keys or passphrases are required.

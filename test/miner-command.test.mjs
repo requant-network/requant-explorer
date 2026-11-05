@@ -1,6 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { minerCommand } from '../src/miner-command.mjs';
+import { encodeAddress, parsePayee } from '../src/format.mjs';
+
+test('public addresses work in the browser command path without Buffer', () => {
+  const input = 'aB'.repeat(32),
+    address = encodeAddress(input);
+  const saved = globalThis.Buffer;
+  try {
+    globalThis.Buffer = undefined;
+    assert.equal(parsePayee(address).owner, input.toLowerCase());
+    assert.equal(parsePayee(address.toUpperCase()).address, address);
+    const output = minerCommand({
+      endpoint: 'pool.requant.network:19340',
+      payee: address,
+      worker: 'rig.2',
+      platform: 'linux',
+    });
+    assert.equal(output.valid, true);
+    assert.equal(output.address, address);
+    assert.ok(output.command.includes('--payee ' + input.toLowerCase()));
+    assert.ok(output.command.endsWith('--worker rig.2'));
+    assert.throws(() =>
+      parsePayee(address.slice(0, 5).toUpperCase() + address.slice(5))
+    );
+  } finally {
+    globalThis.Buffer = saved;
+  }
+});
 
 test('miner commands use the public domain and platform executable', () => {
   const input = {

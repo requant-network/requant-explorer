@@ -41,7 +41,10 @@
     "Transaction and address history, spending links and fee totals are complete only after the canonical transaction index catches up. Coverage is returned with paginated results.",
     "Metrics retain 30 days; rate history starts when measurements are collected. Historical block activity fills as canonical blocks are indexed.",
     "Pending transactions have no recorded arrival time. The mempool may change between pages.",
-    "Unknown orphan transaction bodies cannot be fetched from the active-chain node RPC."
+    "Unknown orphan transaction bodies cannot be fetched from the active-chain node RPC.",
+    "Pool charts retain 30 days of observations and seed only the histories retained by the node. Longer periods have gaps until data accumulates.",
+    "The pool payout archive starts with at most 50 pool payouts and 100 payouts per observed miner. It collects new records and does not claim a complete pre-deployment ledger; archived payout statuses are last reported observations.",
+    "GPU temperature, power consumption and direct connection health are not exposed by the pool statistics RPC. Worker counts can reset when a device expires after an hour without shares."
   ],
   "endpoints": [
     {
@@ -83,6 +86,35 @@
       "path": "/explorer/api/transactions",
       "source": "canonical SQLite transaction index; getrawmempool and bounded gettx for pending",
       "pagination": "50 records, branch-checked history cursor or pending txid cursor"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/pool",
+      "source": "shared poolstats snapshot, public endpoint and chain-observer status"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/pool/miners/{address}",
+      "source": "validated minerstats lookup, shared bounded snapshot cache"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/pool/metrics",
+      "source": "durable pool observations and current node hourly block estimates",
+      "pagination": "1h, 6h, 24h, 7d or 30d; at most 240 buckets"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/pool/payouts",
+      "source": "collected pool or miner payout archive; last reported statuses",
+      "pagination": "20 records; time and txid cursor; status and UTC dates"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/pool/blocks",
+      "source": "collected pool blocks, reconciled against the explorer canonical index",
+      "pagination": "20 records; height and hash cursor; status and UTC dates"
     }
-  ]
+  ],
+  "allowedPoolMethods": ["poolstats", "minerstats"]
 }
