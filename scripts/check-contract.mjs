@@ -18,7 +18,14 @@ assert.equal(contract.amountEncoding, 'decimal-string-of-integer-atoms');
 assert.equal(contract.rateUnit, 'tickets/s');
 for (const method of contract.allowedNodeMethods) {
   assert(
-    ['getinfo', 'getblock', 'gettx', 'history', 'utxos'].includes(method),
+    [
+      'getinfo',
+      'getblock',
+      'gettx',
+      'history',
+      'utxos',
+      'getrawmempool',
+    ].includes(method),
     `Unexpected RPC capability: ${method}`
   );
   assert(

@@ -1,16 +1,7 @@
-import { overview } from '../../../src/chain.mjs';
-export async function GET() {
-  const data = await overview();
-  return Response.json(
-    {
-      status: data.status,
-      observedAt: data.observedAt,
-      stalled: data.stalled ?? null,
-      latestBlockTime: data.latestBlockTime ?? null,
-      unit: 'tickets/s',
-      rateWindowBlocks: data.rateWindow || 0,
-      series: data.series,
-    },
-    { headers: { 'Cache-Control': 'no-store' } }
+import { metrics } from '../../../src/chain.mjs';
+import { readResponse } from '../../../src/api.mjs';
+export async function GET(request: Request) {
+  return readResponse(() =>
+    metrics(new URL(request.url).searchParams.get('period') || '24h')
   );
 }

@@ -6,7 +6,14 @@
   "addressPrefix": "trq1",
   "rpcExposure": "server-only",
   "source": "https://github.com/danifest751/requant/blob/aad4772/crates/node/src/rpc.rs",
-  "allowedNodeMethods": ["getinfo", "getblock", "gettx", "history", "utxos"],
+  "allowedNodeMethods": [
+    "getinfo",
+    "getblock",
+    "gettx",
+    "history",
+    "utxos",
+    "getrawmempool"
+  ],
   "forbiddenPublicMethods": [
     "getwork",
     "submitwork",
@@ -31,9 +38,10 @@
     "rateWindow"
   ],
   "gaps": [
-    "Address history is limited to the newest 100 records; the node does not expose a pagination cursor.",
-    "Historical metrics begin at explorer deployment and use a 120-block estimate window. Rates are unavailable after 20 minutes without a new block; stalled describes block recency, independently of RPC connectivity.",
-    "Block hash lookup becomes available as the local canonical index catches up. Known orphan blocks are retained."
+    "Transaction and address history, spending links and fee totals are complete only after the canonical transaction index catches up. Coverage is returned with paginated results.",
+    "Metrics retain 30 days; rate history starts when measurements are collected. Historical block activity fills as canonical blocks are indexed.",
+    "Pending transactions have no recorded arrival time. The mempool may change between pages.",
+    "Unknown orphan transaction bodies cannot be fetched from the active-chain node RPC."
   ],
   "endpoints": [
     {
@@ -50,7 +58,8 @@
     {
       "method": "GET",
       "path": "/explorer/api/blocks/{heightOrHash}",
-      "source": "getblock by height; hash lookup requires an adapter index"
+      "source": "getblock by height; hash lookup requires an adapter index",
+      "pagination": "offset, 40 transaction summaries"
     },
     {
       "method": "GET",
@@ -60,13 +69,20 @@
     {
       "method": "GET",
       "path": "/explorer/api/addresses/{address}",
-      "source": "validated address decoding, history and utxos"
+      "source": "validated address decoding, history and utxos",
+      "pagination": "50 indexed confirmed records, before cursor; up to 100 recent node records during backfill"
     },
     {
       "method": "GET",
       "path": "/explorer/api/metrics",
       "source": "durable time-series collector",
-      "pagination": "bounded-time-range"
+      "pagination": "1h, 24h, 7d or 30d; bounded chart buckets"
+    },
+    {
+      "method": "GET",
+      "path": "/explorer/api/transactions",
+      "source": "canonical SQLite transaction index; getrawmempool and bounded gettx for pending",
+      "pagination": "50 records, branch-checked history cursor or pending txid cursor"
     }
   ]
 }

@@ -5,27 +5,33 @@ import {
   Footer,
   Search,
   Details,
-  Transactions,
   Failure,
+  HashLink,
 } from '../../../src/ui';
-import { date } from '../../../src/format.mjs';
+import { amount } from '../../../src/format.mjs';
+import { WorkspaceNav, FullHash, TransactionRows } from '../../../src/records';
+import { Refresh, Time } from '../../../src/workspace';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Block' };
 export default async function BlockPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<any>;
 }) {
+  const query = await searchParams;
   let b;
   try {
-    b = await getBlock((await params).key);
+    b = await getBlock((await params).key, Number(query.offset || 0));
   } catch (error) {
     return <Failure error={error} />;
   }
   return (
     <>
       <Header />
-      <main className="explorer-page">
+      <main className="explorer-page workspace-page">
+        <WorkspaceNav />
         <Search />
         <div className="detail-heading">
           <div>
@@ -36,65 +42,137 @@ export default async function BlockPage({
             {b.active ? 'Active chain' : 'Orphaned block'}
           </span>
         </div>
-        <p className="full-hash mono">{b.id}</p>
+        <FullHash value={b.id} />
+        <Refresh observedAt={b.observedAt} />
         <div className="block-navigation">
           {b.height > 0 && (
-            <Link className="button" href={'/block/' + (b.height - 1)}>
+            <Link
+              prefetch={false}
+              className="button"
+              href={'/block/' + b.previous}
+            >
               ← Previous block
             </Link>
           )}
-          {b.confirmations > 1 && (
-            <Link className="button" href={'/block/' + (b.height + 1)}>
+          {b.active && b.confirmations > 1 && (
+            <Link
+              prefetch={false}
+              className="button"
+              href={'/block/' + (b.height + 1)}
+            >
               Next block →
             </Link>
           )}
         </div>
         <Details
           rows={[
-            ['Timestamp', date(b.time)],
+            ['Block time', <Time seconds={b.time} />],
             ['Confirmations', b.confirmations],
-            ['Transactions', b.txs],
-            ['Block size', b.byteLength + ' bytes'],
-            ['Epoch', b.epoch + ' / 1440 blocks'],
-            ['Work claim', '272 bytes / TNet v1'],
-            ['Nonce', b.nonce],
-            ['Row / piece', b.row + ' / ' + b.piece],
             [
-              'Previous block',
-              b.height > 0 ? (
-                <Link className="hash" href={'/block/' + b.previous}>
-                  {b.previous}
-                </Link>
+              'Interval from parent',
+              b.intervalSeconds === null
+                ? b.height === 0
+                  ? 'Genesis'
+                  : 'Unavailable'
+                : b.intervalSeconds + ' seconds',
+            ],
+            ['Transactions', b.txs],
+            ['Block size', b.byteLength.toLocaleString('en-US') + ' bytes'],
+            [
+              'Miner payout address',
+              b.miner ? (
+                <HashLink type="address" value={b.miner} />
               ) : (
-                'Genesis'
+                'Unavailable'
               ),
             ],
-            ['Target', <span className="mono full-hash">{b.target}</span>],
             [
-              'Transaction root',
-              <span className="mono full-hash">{b.txRoot}</span>,
+              'Miner output (including fees)',
+              b.rewardAtoms === null
+                ? 'Unavailable'
+                : amount(b.rewardAtoms) + ' RQT',
+            ],
+            [
+              'Development fund output',
+              b.fundAtoms === null
+                ? 'Unavailable'
+                : amount(b.fundAtoms) + ' RQT',
+            ],
+            [
+              'Total transaction fees',
+              b.feesAtoms === null
+                ? 'Indexing transaction bodies'
+                : amount(b.feesAtoms) + ' RQT',
             ],
           ]}
         />
+        <details className="technical">
+          <summary>TNet work claim / block header</summary>
+          <Details
+            rows={[
+              [
+                'Epoch',
+                b.epoch +
+                  ' · ' +
+                  (1440 - (b.height % 1440)) +
+                  ' blocks to next epoch',
+              ],
+              [
+                'Work claim',
+                '272 bytes / TNet v1; excludes header and transactions',
+              ],
+              ['Nonce', b.nonce],
+              ['Row / piece', b.row + ' / ' + b.piece],
+              ['Target', b.target],
+              ['Transaction root', b.txRoot],
+              ['Parent block', <HashLink value={b.previous} />],
+            ]}
+          />
+          <a className="text-link" href={'/explorer/api/blocks/' + b.id}>
+            View JSON →
+          </a>
+        </details>
         <section className="records-panel">
           <div className="panel-heading">
             <h2>Transactions</h2>
+            <span className="muted">
+              {b.txids.length ? b.offset + 1 : 0}–
+              {Math.min(b.offset + 40, b.txids.length)} of {b.txids.length}
+            </span>
           </div>
           {b.active ? (
-            <Transactions transactions={b.transactions} />
+            <TransactionRows transactions={b.transactions} />
           ) : (
             <div className="empty-state">
-              This block is outside the active chain. Transaction confirmations
-              must be checked against the current chain.
+              This block is outside the active chain. Its transactions do not
+              receive confirmations from this branch.
             </div>
           )}
-          {b.transactionsTruncated && (
-            <p className="notice">
-              Showing the first 40 transactions. Remaining IDs:{' '}
-              {b.txids.slice(40).join(', ')}
-            </p>
-          )}
         </section>
+        {b.active && (
+          <div className="actions">
+            {b.offset > 0 && (
+              <Link
+                prefetch={false}
+                className="button"
+                href={
+                  '/block/' + b.id + '?offset=' + Math.max(0, b.offset - 40)
+                }
+              >
+                ← Previous transactions
+              </Link>
+            )}
+            {b.nextOffset !== null && (
+              <Link
+                prefetch={false}
+                className="button primary"
+                href={'/block/' + b.id + '?offset=' + b.nextOffset}
+              >
+                More transactions →
+              </Link>
+            )}
+          </div>
+        )}
       </main>
       <Footer />
     </>
