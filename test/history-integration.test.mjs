@@ -13,6 +13,30 @@ import {
   metrics,
 } from '../src/chain.mjs';
 
+test('snapshot failures hide internal database and runtime details', async () => {
+  process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'requant-error-'));
+  process.env.RPC_URL = 'http://test-only.invalid';
+  const original = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    const { method } = JSON.parse(options.body);
+    const result =
+      method === 'getinfo'
+        ? { network: 'test', height: 0, tip: '0'.repeat(64) }
+        : { id: '0'.repeat(64), height: 0, hex: null };
+    return new Response(JSON.stringify({ result, error: null }));
+  };
+  try {
+    const data = await overview();
+    assert.equal(data.status, 'unavailable');
+    assert.equal(
+      data.error,
+      'The explorer could not refresh the network snapshot.'
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test('backfill enables full history, block pagination and a shared snapshot across bundles', async () => {
   process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'requant-history-'));
   process.env.RPC_URL = 'http://test-only.invalid';

@@ -332,18 +332,22 @@ export async function overview() {
   state().lastAttempt = Date.now();
   state().refreshing = update()
     .catch((error) => {
+      const message =
+        error instanceof RpcError
+          ? error.message
+          : 'The explorer could not refresh the network snapshot.';
       state().snapshot = state().snapshot?.observedAt
         ? {
             ...state().snapshot,
             status: 'stale',
             stale: true,
-            error: error.message,
+            error: message,
           }
         : {
             status: 'unavailable',
             network: 'testnet',
             observedAt: null,
-            error: error.message,
+            error: message,
             blocks: [],
             transactions: [],
             series: [],
