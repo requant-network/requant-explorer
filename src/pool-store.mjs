@@ -283,7 +283,7 @@ export function reconcilePoolBlocks(
           ? 'credited'
           : 'immature'
         : 'orphaned';
-      if(status===block.status)continue;
+      if (status === block.status) continue;
       update.run(
         JSON.stringify({ ...block, status, confirmations }),
         Math.floor(observedAt / 1000),

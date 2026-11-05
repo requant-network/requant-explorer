@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { short, amount, date } from './format.mjs';
 import { Time } from './workspace';
-import { publicError } from './api.mjs';
+import { publicError } from './errors.mjs';
 export function Header({ active = 'explorer' }: { active?: string }) {
   // the same links, in the same order, as the website's header
   const site = [

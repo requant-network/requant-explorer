@@ -1,9 +1,5 @@
-import { RpcError } from './rpc.mjs';
-export function publicError(error) {
-  return error instanceof RpcError
-    ? error.message
-    : 'The explorer could not complete this request.';
-}
+import { publicError } from './errors.mjs';
+export { publicError } from './errors.mjs';
 
 export async function readResponse(operation) {
   try {

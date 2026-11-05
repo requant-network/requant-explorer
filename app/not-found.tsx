@@ -1,5 +1,5 @@
 import { Failure } from '../src/ui';
-import { RpcError } from '../src/rpc.mjs';
+import { RpcError } from '../src/errors.mjs';
 export default function NotFound() {
   return (
     <Failure
