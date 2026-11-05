@@ -32,6 +32,7 @@ test('pool statistics keep atoms exact and order miners by rate', () => {
     time: 1791607538,
     pool: 8633215.78,
     network: 8486225.29,
+    devices: 2,
   });
   assert.equal(s.blocks[0].rewardAtoms, '375873263');
   assert.equal(s.payouts[0].totalAtoms, '2232743986');

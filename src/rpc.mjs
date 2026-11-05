@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { parse } from 'lossless-json';
+import { RpcError } from './errors.mjs';
+export { RpcError } from './errors.mjs';
 const methods = new Set([
   'getinfo',
   'getblock',
@@ -19,12 +21,6 @@ const slots = (globalThis.__requantExplorerRpc ??= {
   background: new AsyncLocalStorage(),
 });
 export const background = slots.background;
-export class RpcError extends Error {
-  constructor(message, kind = 'unavailable') {
-    super(message);
-    this.kind = kind;
-  }
-}
 function normalize(value) {
   if (Array.isArray(value)) return value.map(normalize);
   if (value && typeof value === 'object') {

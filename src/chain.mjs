@@ -55,6 +55,15 @@ export function reconcileIndex(database, ancestorHeight) {
     .run(ancestorHeight);
   database.prepare('DELETE FROM samples WHERE height>?').run(ancestorHeight);
 }
+export function indexedPoolBlocks(records) {
+  const find = db().prepare(
+    'SELECT id FROM blocks WHERE active=1 AND height=?'
+  );
+  return records.map(({ id, height }) => {
+    const active = find.get(height);
+    return { id, active: active ? active.id === id : null };
+  });
+}
 function storeBlock(block) {
   db()
     .prepare('UPDATE blocks SET active=0 WHERE height=? AND id<>?')
