@@ -3,30 +3,51 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { rpc, RpcError } from './rpc.mjs';
 import { encodeAddress, decodeAddress, hashPattern } from './format.mjs';
+import {
+  initTransactions,
+  storeTransactions,
+  coverage,
+  transactionPage,
+  spending,
+  pageOptions,
+} from './transactions.mjs';
 const blockSilenceMs = 20 * 60_000;
-let database,
-  refreshing,
-  snapshot,
-  lastAttempt = 0;
+// Next bundles instrumentation and routes separately; they share one collector and index job.
+function state() {
+  const stores = (globalThis.__requantExplorerChains ??= new Map());
+  const key = process.env.DATA_DIR || './data';
+  if (!stores.has(key))
+    stores.set(key, {
+      database: null,
+      refreshing: null,
+      snapshot: null,
+      lastAttempt: 0,
+      backfilling: null,
+      indexing: null,
+    });
+  return stores.get(key);
+}
 function db() {
-  if (database) return database;
+  const cache = state();
+  if (cache.database) return cache.database;
   const dir = resolve(
     /* turbopackIgnore: true */ process.env.DATA_DIR || './data'
   );
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  database = new DatabaseSync(resolve(dir, 'explorer.sqlite'));
-  database.exec(`PRAGMA journal_mode=WAL;
+  cache.database = new DatabaseSync(resolve(dir, 'explorer.sqlite'));
+  cache.database.exec(`PRAGMA journal_mode=WAL;
     CREATE TABLE IF NOT EXISTS blocks(id TEXT PRIMARY KEY,height INTEGER NOT NULL,time INTEGER NOT NULL,data TEXT NOT NULL,active INTEGER NOT NULL);
     CREATE UNIQUE INDEX IF NOT EXISTS active_height ON blocks(height) WHERE active=1;
     CREATE TABLE IF NOT EXISTS samples(time INTEGER PRIMARY KEY,tip TEXT NOT NULL,height INTEGER NOT NULL,rate REAL,peers INTEGER NOT NULL,block_time INTEGER);`);
+  initTransactions(cache.database);
   if (
-    !database
+    !cache.database
       .prepare('PRAGMA table_info(samples)')
       .all()
       .some((column) => column.name === 'block_time')
   )
-    database.exec('ALTER TABLE samples ADD COLUMN block_time INTEGER');
-  return database;
+    cache.database.exec('ALTER TABLE samples ADD COLUMN block_time INTEGER');
+  return cache.database;
 }
 export function reconcileIndex(database, ancestorHeight) {
   database
@@ -47,7 +68,48 @@ function storeBlock(block) {
       JSON.stringify(block)
     );
 }
-async function indexBatch(info) {
+function indexBatch(info) {
+  const cache = state();
+  if (cache.indexing) return cache.indexing;
+  cache.indexing = buildIndex(info).finally(() => {
+    cache.indexing = null;
+  });
+  return cache.indexing;
+}
+async function buildIndex(info) {
+  await reconcileTip(info);
+  const begin = nextMissingHeight(),
+    end = Math.min(Number(info.height), begin + 63);
+  const blocks = [];
+  let bytes = 0;
+  for (let height = begin; height <= end; height++) {
+    const block = await rpc('getblock', [height]);
+    if (
+      blocks.length &&
+      Buffer.from(block.hex, 'hex').subarray(12, 44).toString('hex') !==
+        blocks.at(-1).id
+    )
+      throw new RpcError(
+        'The chain changed during indexing. Retrying shortly.'
+      );
+    blocks.push(block);
+    bytes += block.hex.length;
+    if (bytes >= 16 * 1024 * 1024) break;
+  }
+  if (!blocks.length) return;
+  const last = blocks.at(-1);
+  if ((await rpc('getblock', [Number(last.height)])).id !== last.id)
+    throw new RpcError('The chain changed during indexing. Retrying shortly.');
+  db().exec('BEGIN IMMEDIATE');
+  try {
+    for (const block of blocks) storeBlock(block);
+    db().exec('COMMIT');
+  } catch (error) {
+    db().exec('ROLLBACK');
+    throw error;
+  }
+}
+async function reconcileTip(info) {
   let top = db()
     .prepare(
       'SELECT height,id FROM blocks WHERE active=1 ORDER BY height DESC LIMIT 1'
@@ -56,12 +118,17 @@ async function indexBatch(info) {
   if (top) {
     let height = Math.min(top.height, Number(info.height));
     let block = await rpc('getblock', [height]);
+    let steps = 0;
     while (
       height >= 0 &&
       db()
         .prepare('SELECT id FROM blocks WHERE height=? AND active=1')
         .get(height)?.id !== block.id
     ) {
+      if (++steps > 16) {
+        height = -1;
+        break;
+      }
       height--;
       if (height >= 0) block = await rpc('getblock', [height]);
     }
@@ -70,11 +137,61 @@ async function indexBatch(info) {
       top = height < 0 ? null : { height };
     }
   }
-  const begin = top ? top.height + 1 : 0,
-    end = Math.min(Number(info.height), begin + 63);
-  for (let height = begin; height <= end; height++)
-    storeBlock(await rpc('getblock', [height]));
 }
+function nextMissingHeight() {
+  if (!db().prepare('SELECT 1 FROM blocks WHERE active=1 AND height=0').get())
+    return 0;
+  return db()
+    .prepare(
+      `SELECT b.height+1 AS next FROM blocks b LEFT JOIN blocks n ON n.active=1 AND n.height=b.height+1
+    WHERE b.active=1 AND n.id IS NULL ORDER BY b.height LIMIT 1`
+    )
+    .get().next;
+}
+
+export function backfillTransactions() {
+  if (state().backfilling) return state().backfilling;
+  state().backfilling = (async () => {
+    const info = await rpc('getinfo');
+    if (info.network !== 'test')
+      throw new RpcError('The connected node is not on Requant testnet.');
+    await indexBatch(info);
+    let budget = 64;
+    while (budget > 0) {
+      const row = db()
+        .prepare(
+          `SELECT b.data FROM blocks b LEFT JOIN tx_blocks t ON t.block_id=b.id
+        WHERE b.active=1 AND t.block_id IS NULL ORDER BY b.height DESC LIMIT 1`
+        )
+        .get();
+      if (!row) break;
+      const block = JSON.parse(row.data);
+      const known = new Set(
+        db()
+          .prepare('SELECT txid FROM chain_txs WHERE block_id=?')
+          .all(block.id)
+          .map((t) => t.txid)
+      );
+      const missing = block.txids.filter((id) => !known.has(id));
+      const batch = missing.slice(0, Math.min(4, budget));
+      const txs = [];
+      for (const id of batch) txs.push(await rpc('gettx', [id]));
+      const current = await rpc('getblock', [Number(block.height)]);
+      if (current.id !== block.id) {
+        reconcileIndex(db(), Number(block.height) - 1);
+        throw new RpcError(
+          'The chain changed during indexing. Retrying shortly.'
+        );
+      }
+      storeTransactions(db(), block, txs, batch.length === missing.length);
+      budget -= Math.max(1, batch.length);
+    }
+  })().finally(() => {
+    state().backfilling = null;
+  });
+  return state().backfilling;
+}
+
 export function estimatedRate(blocks) {
   if (blocks.length < 2) return null;
   const ordered = [...blocks].sort(
@@ -108,8 +225,8 @@ async function update() {
           const row = db()
             .prepare('SELECT data FROM blocks WHERE height=? AND active=1')
             .get(h);
-          // Current tip and the window are read again: never trust a stale fork in the recent cache.
-          return rpc('getblock', [h]);
+          // reconcileTip checked canonical membership; a reorg invalidates the affected suffix.
+          return row ? JSON.parse(row.data) : rpc('getblock', [h]);
         })
       ))
     );
@@ -119,16 +236,26 @@ async function update() {
     throw new RpcError(
       'The chain changed during this update. Refresh shortly.'
     );
+  for (const block of blocks) storeBlock(block);
   const now = Date.now(),
     stalled = now - Number(blocks[0].time) * 1000 > blockSilenceMs,
     measured = stalled ? null : estimatedRate(blocks);
-  const transactions = await Promise.all(
-    blocks
-      .slice(0, 8)
-      .flatMap((b) => b.txids.slice(0, 4))
-      .slice(0, 8)
-      .map((id) => getTransaction(id))
-  );
+  const latestIds = blocks
+    .slice(0, 8)
+    .flatMap((b) => b.txids.slice(0, 4))
+    .slice(0, 8);
+  const transactions = [];
+  for (let i = 0; i < latestIds.length; i += 4)
+    transactions.push(
+      ...(await Promise.all(
+        latestIds.slice(i, i + 4).map((id) =>
+          getTransaction(id, {
+            info,
+            block: blocks.find((b) => b.txids.includes(id)),
+          })
+        )
+      ))
+    );
   db()
     .prepare(
       'INSERT OR REPLACE INTO samples(time,tip,height,rate,peers,block_time) VALUES(?,?,?,?,?,?)'
@@ -143,11 +270,9 @@ async function update() {
     );
   db()
     .prepare('DELETE FROM samples WHERE time<?')
-    .run(now - 86400000);
-  const indexHeight = db()
-    .prepare('SELECT MAX(height) AS height FROM blocks WHERE active=1')
-    .get().height;
-  snapshot = {
+    .run(now - 30 * 86400000);
+  const indexHeight = nextMissingHeight() - 1;
+  state().snapshot = {
     status: 'connected',
     network: 'testnet',
     observedAt: now,
@@ -164,34 +289,56 @@ async function update() {
     indexedTransactions: Number(info.indexed_txs),
     estimatedTicketsPerSecond: measured,
     rateWindow: blocks.length - 1,
+    averageBlockSeconds:
+      blocks.length > 1
+        ? Math.max(
+            0,
+            (Number(blocks[0].time) - Number(blocks.at(-1).time)) /
+              (blocks.length - 1)
+          )
+        : null,
+    epoch: Math.floor(height / 1440),
+    epochRemaining: 1440 - (height % 1440),
+    indexCoverage: coverage(db(), height),
     latestBlockTime: Number(blocks[0].time),
-    blocks: blocks.slice(0, 10),
+    blocks: blocks.slice(0, 10).map(blockSummary),
     transactions,
     indexHeight,
     series: db()
       .prepare(
         `SELECT s.time, CASE WHEN s.time - COALESCE(s.block_time, b.time) * 1000 <= ?
         THEN s.rate ELSE NULL END AS rate FROM samples s
-        LEFT JOIN blocks b ON b.id=s.tip ORDER BY s.time`
+         LEFT JOIN blocks b ON b.id=s.tip WHERE s.time>=? ORDER BY s.time`
       )
-      .all(blockSilenceMs)
+      .all(blockSilenceMs, now - 86400000)
       .map(({ time, rate }) => ({ time, rate })),
     stale: false,
   };
-  return snapshot;
+  return state().snapshot;
 }
 export async function overview() {
-  if (snapshot && Date.now() - lastAttempt < 15000) {
-    if (!snapshot.observedAt) return snapshot;
-    const stale = snapshot.stale || Date.now() - snapshot.observedAt > 60000;
-    return { ...snapshot, stale, status: stale ? 'stale' : snapshot.status };
+  if (state().snapshot && Date.now() - state().lastAttempt < 15000) {
+    if (!state().snapshot.observedAt) return state().snapshot;
+    const stale =
+      state().snapshot.stale ||
+      Date.now() - state().snapshot.observedAt > 60000;
+    return {
+      ...state().snapshot,
+      stale,
+      status: stale ? 'stale' : state().snapshot.status,
+    };
   }
-  if (refreshing) return refreshing;
-  lastAttempt = Date.now();
-  refreshing = update()
+  if (state().refreshing) return state().refreshing;
+  state().lastAttempt = Date.now();
+  state().refreshing = update()
     .catch((error) => {
-      snapshot = snapshot?.observedAt
-        ? { ...snapshot, status: 'stale', stale: true, error: error.message }
+      state().snapshot = state().snapshot?.observedAt
+        ? {
+            ...state().snapshot,
+            status: 'stale',
+            stale: true,
+            error: error.message,
+          }
         : {
             status: 'unavailable',
             network: 'testnet',
@@ -201,14 +348,16 @@ export async function overview() {
             transactions: [],
             series: [],
           };
-      return snapshot;
+      return state().snapshot;
     })
     .finally(() => {
-      refreshing = null;
+      state().refreshing = null;
     });
-  return refreshing;
+  return state().refreshing;
 }
-export async function getBlock(key) {
+export async function getBlock(key, offset = 0) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > 1000000)
+    throw new RpcError('Invalid transaction page.', 'invalid');
   let block,
     active = true;
   if (/^\d{1,12}$/.test(key)) block = await rpc('getblock', [Number(key)]);
@@ -241,14 +390,33 @@ export async function getBlock(key) {
     throw new RpcError('The connected node is not on Requant testnet.');
   const transactions = [];
   if (active)
-    for (let i = 0; i < Math.min(block.txids.length, 40); i += 4)
+    for (let i = offset; i < Math.min(block.txids.length, offset + 40); i += 4)
       transactions.push(
         ...(await Promise.all(
           block.txids
-            .slice(i, Math.min(i + 4, 40))
-            .map((id) => getTransaction(id))
+            .slice(i, Math.min(i + 4, offset + 40))
+            .map((id) => getTransaction(id, { info, block }))
         ))
       );
+  const coinbase =
+    active && block.txids.length
+      ? offset === 0
+        ? transactions[0]
+        : await getTransaction(block.txids[0])
+      : null;
+  const previousBlock =
+    Number(block.height) > 0
+      ? await rpc('getblock', [Number(block.height) - 1])
+      : null;
+  const parent = bytes.subarray(12, 44).toString('hex');
+  const complete = db()
+    .prepare('SELECT 1 FROM tx_blocks WHERE block_id=?')
+    .get(block.id);
+  const feeRows = complete
+    ? db()
+        .prepare('SELECT data FROM chain_txs WHERE block_id=? AND coinbase=0')
+        .all(block.id)
+    : null;
   return {
     ...block,
     height: Number(block.height),
@@ -265,34 +433,71 @@ export async function getBlock(key) {
     piece: bytes.length >= 132 ? bytes.readUInt32LE(128) : null,
     epoch: Math.floor(Number(block.height) / 1440),
     transactions,
-    transactionsTruncated: block.txids.length > 40,
+    offset,
+    nextOffset: offset + 40 < block.txids.length ? offset + 40 : null,
+    transactionsTruncated: offset + 40 < block.txids.length,
+    miner: coinbase?.outputs[0]?.address || null,
+    rewardAtoms: coinbase?.outputs[0]?.value || null,
+    fundAtoms: coinbase?.outputs[1]?.value || null,
+    intervalSeconds:
+      previousBlock?.id === parent
+        ? Math.max(0, Number(block.time) - Number(previousBlock.time))
+        : null,
+    feesAtoms: feeRows
+      ? feeRows
+          .reduce((sum, t) => sum + BigInt(JSON.parse(t.data).fee), 0n)
+          .toString()
+      : null,
+    observedAt: Date.now(),
   };
 }
-export async function getTransaction(id) {
+export async function getTransaction(id, context = null) {
   if (!hashPattern.test(id))
     throw new RpcError('Enter a 64-character transaction ID.', 'invalid');
-  const info = await rpc('getinfo');
+  const info = context?.info || (await rpc('getinfo'));
   if (info.network !== 'test')
     throw new RpcError('The connected node is not on Requant testnet.');
+  if (!context) await reconcileTip(info);
   const tx = await rpc('gettx', [id.toLowerCase()]);
+  const progress = coverage(db(), Number(info.height));
+  const block =
+    tx.height === null
+      ? null
+      : context?.block || (await rpc('getblock', [Number(tx.height)]));
+  if (block && !block.txids.includes(tx.txid))
+    throw new RpcError(
+      'The transaction moved during this update. Refresh shortly.'
+    );
+  const size = tx.hex.length / 2;
   return {
     ...tx,
     height: tx.height === null ? null : Number(tx.height),
     confirmations: Number(tx.confirmations),
+    time: block ? Number(block.time) : null,
+    blockId: block?.id || null,
+    observedAt: Date.now(),
+    maturityRemaining:
+      tx.coinbase && tx.height !== null
+        ? Math.max(0, 100 - (Number(info.height) + 1 - Number(tx.height)))
+        : 0,
+    feeRate: size ? ((BigInt(tx.fee) * 100n) / BigInt(size)).toString() : null,
+    indexCoverage: progress,
     inputs: tx.inputs.map((input) => ({
       ...input,
       address: input.owner ? encodeAddress(input.owner) : null,
     })),
-    outputs: tx.outputs.map((output) => ({
+    outputs: tx.outputs.map((output, vout) => ({
       ...output,
       address: encodeAddress(output.owner),
+      spentBy: spending(db(), tx.txid, vout),
     })),
     totalAtoms: tx.outputs
       .reduce((sum, out) => sum + BigInt(out.value), 0n)
       .toString(),
   };
 }
-export async function getAddress(address) {
+export async function getAddress(address, params = {}) {
+  const options = pageOptions(params);
   let owner;
   try {
     owner = decodeAddress(address);
@@ -305,10 +510,51 @@ export async function getAddress(address) {
   const info = await rpc('getinfo');
   if (info.network !== 'test')
     throw new RpcError('The connected node is not on Requant testnet.');
+  await reconcileTip(info);
   const [utxos, history] = await Promise.all([
     rpc('utxos', [owner]),
     rpc('history', [owner, 100]),
   ]);
+  const indexed = transactionPage(db(), Number(info.height), params, owner);
+  const pending =
+    !options.before &&
+    options.from === null &&
+    options.to === null &&
+    ['all', 'pending', 'incoming', 'outgoing'].includes(options.kind)
+      ? history
+          .filter(
+            (t) =>
+              t.height === null &&
+              (options.kind !== 'incoming' || BigInt(t.received) > 0n) &&
+              (options.kind !== 'outgoing' || BigInt(t.sent) > 0n)
+          )
+          .map((t) => ({
+            ...t,
+            net: (BigInt(t.received) - BigInt(t.sent)).toString(),
+            coinbase: false,
+          }))
+      : [];
+  const recent = history
+    .filter((t) => t.height !== null)
+    .filter(
+      (t) =>
+        options.kind !== 'pending' &&
+        (options.from === null || Number(t.time) >= options.from) &&
+        (options.to === null || Number(t.time) < options.to) &&
+        (options.kind !== 'incoming' || BigInt(t.received) > 0n) &&
+        (options.kind !== 'outgoing' || BigInt(t.sent) > 0n)
+    )
+    .map((t) => ({
+      ...t,
+      net: (BigInt(t.received) - BigInt(t.sent)).toString(),
+      coinbase: null,
+    }));
+  const entries =
+    indexed.coverage.complete ||
+    options.before ||
+    ['coinbase', 'transfer'].includes(options.kind)
+      ? indexed.entries
+      : recent;
   const sum = (filter) =>
     utxos
       .filter(filter)
@@ -322,11 +568,136 @@ export async function getAddress(address) {
     pendingAtoms: sum((item) => !item.confirmed),
     immatureAtoms: sum((item) => item.confirmed && !item.spendable),
     utxos,
-    history,
-    limit: 100,
-    truncated: history.length === 100,
+    history: [...pending, ...entries],
+    next: indexed.coverage.complete ? indexed.next : null,
+    coverage: indexed.coverage,
+    truncated: !indexed.coverage.complete && history.length === 100,
+    observedAt: Date.now(),
+    tipHeight: Number(info.height),
   };
 }
+export async function getTransactions(params = {}) {
+  const options = pageOptions(params);
+  const info = await rpc('getinfo');
+  if (info.network !== 'test')
+    throw new RpcError('The connected node is not on Requant testnet.');
+  await reconcileTip(info);
+  if (options.kind === 'pending') {
+    if (options.from !== null || options.to !== null)
+      throw new RpcError(
+        'Pending transactions have no block date. Clear date filters.',
+        'invalid'
+      );
+    if (params.after && !hashPattern.test(params.after))
+      throw new RpcError('Invalid pending cursor.', 'invalid');
+    const all = (await rpc('getrawmempool')).sort();
+    const ids = all
+      .filter((id) => !params.after || id > params.after)
+      .slice(0, 51);
+    const entries = [];
+    for (let i = 0; i < Math.min(ids.length, 50); i += 4)
+      entries.push(
+        ...(await Promise.all(
+          ids.slice(i, Math.min(i + 4, 50)).map(async (id) => {
+            try {
+              const tx = await getTransaction(id, { info });
+              return tx.height === null ? tx : null;
+            } catch (error) {
+              if (error.kind === 'not-found') return null;
+              throw error;
+            }
+          })
+        ))
+      );
+    return {
+      entries: entries.filter(Boolean),
+      next: null,
+      nextAfter: ids.length > 50 ? ids[49] : null,
+      pendingTotal: all.length,
+      coverage: coverage(db(), Number(info.height)),
+      observedAt: Date.now(),
+    };
+  }
+  const result = transactionPage(db(), Number(info.height), params);
+  return {
+    ...result,
+    entries: result.entries.map((tx) => ({
+      ...tx,
+      totalAtoms: tx.outputs
+        .reduce((sum, o) => sum + BigInt(o.value), 0n)
+        .toString(),
+    })),
+    observedAt: Date.now(),
+  };
+}
+
+export async function metrics(period = '24h') {
+  const hours = new Map([
+    ['1h', 1],
+    ['24h', 24],
+    ['7d', 168],
+    ['30d', 720],
+  ]).get(period);
+  if (!hours) throw new RpcError('Invalid chart period.', 'invalid');
+  const data = state().snapshot || (await overview());
+  const start = Date.now() - hours * 3600000;
+  const bucket = Math.max(60000, (hours * 3600000) / 240);
+  const series = db()
+    .prepare(
+      'SELECT time,rate,block_time FROM samples WHERE time>=? ORDER BY time'
+    )
+    .all(start);
+  const grouped = new Map();
+  for (const s of series) {
+    const key = Math.floor(s.time / bucket);
+    grouped.set(key, {
+      time: s.time,
+      rate:
+        s.time - Number(s.block_time) * 1000 > blockSilenceMs ? null : s.rate,
+    });
+  }
+  const activity = db()
+    .prepare(
+      `SELECT CAST(time*1000/? AS INTEGER)*? AS time,
+    AVG(CASE WHEN height=prev_height+1 AND time>=prev_time THEN time-prev_time ELSE NULL END) AS interval,
+    SUM(MAX(CAST(json_extract(data,'$.txs') AS INTEGER)-1,0)) AS transfers
+    FROM (SELECT height,time,data,LAG(height) OVER(ORDER BY height) AS prev_height,LAG(time) OVER(ORDER BY height) AS prev_time
+      FROM blocks WHERE active=1 AND time>=?) GROUP BY 1 ORDER BY 1`
+    )
+    .all(bucket, bucket, Math.floor(start / 1000));
+  const fees = db()
+    .prepare(
+      `SELECT t.time,json_extract(t.data,'$.fee') AS fee FROM chain_txs t JOIN blocks b ON b.id=t.block_id
+    JOIN tx_blocks done ON done.block_id=t.block_id WHERE b.active=1 AND t.coinbase=0 AND t.time>=? ORDER BY t.time`
+    )
+    .iterate(Math.floor(start / 1000));
+  const daily = new Map();
+  for (const tx of fees) {
+    const day = Math.floor(tx.time / 86400) * 86400000;
+    daily.set(day, (daily.get(day) || 0n) + BigInt(tx.fee));
+  }
+  return {
+    status:
+      data.observedAt && Date.now() - data.observedAt > 60000
+        ? 'stale'
+        : data.status,
+    unit: 'tickets/s',
+    rateWindowBlocks: data.rateWindow || 0,
+    stalled: data.stalled ?? null,
+    latestBlockTime: data.latestBlockTime ?? null,
+    observedAt: data.observedAt,
+    series: [...grouped.values()],
+    intervals: activity.map((b) => ({ time: b.time, value: b.interval })),
+    transfers: activity.map((b) => ({ time: b.time, value: b.transfers })),
+    fees: [...daily].map(([time, atoms]) => ({
+      time,
+      value: atoms.toString(),
+    })),
+    coverage: coverage(db(), Number(data.height || 0)),
+    period,
+  };
+}
+
 export async function search(query) {
   const q = query.trim();
   if (/^\d{1,12}$/.test(q)) return '/block/' + q;
@@ -353,6 +724,21 @@ export async function search(query) {
     'Search a block height, transaction ID, block hash or testnet address.',
     'invalid'
   );
+}
+
+function blockSummary(block) {
+  const { hex, ...fields } = block;
+  const tx = db()
+    .prepare(
+      'SELECT data FROM chain_txs WHERE block_id=? AND coinbase=1 LIMIT 1'
+    )
+    .get(block.id);
+  const output = tx ? JSON.parse(tx.data).outputs[0] : null;
+  return {
+    ...fields,
+    byteLength: hex.length / 2,
+    miner: output ? encodeAddress(output.owner) : null,
+  };
 }
 
 export async function blockList(before = null, limit = 20) {
@@ -388,7 +774,7 @@ export async function blockList(before = null, limit = 20) {
     network: 'testnet',
     tip: info.tip,
     observedAt: Date.now(),
-    blocks: blocks.map(({ hex, ...block }) => block),
+    blocks: blocks.map(blockSummary),
     nextHeight: start - heights.length >= 0 ? start - heights.length : null,
   };
 }

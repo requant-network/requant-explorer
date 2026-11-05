@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { short, amount, date } from './format.mjs';
+import { Time } from './workspace';
 export function Header({ active = 'explorer' }: { active?: string }) {
   // the same links, in the same order, as the website's header
   const site = [
@@ -31,10 +32,18 @@ export function Header({ active = 'explorer' }: { active?: string }) {
             {label}
           </a>
         ))}
-        <Link className={active === 'explorer' ? 'active' : ''} href="/">
+        <Link
+          prefetch={false}
+          className={active === 'explorer' ? 'active' : ''}
+          href="/"
+        >
           Explorer
         </Link>
-        <Link className={active === 'pool' ? 'active' : ''} href="/pool">
+        <Link
+          prefetch={false}
+          className={active === 'pool' ? 'active' : ''}
+          href="/pool"
+        >
           Pool
         </Link>
         {after.map(({ label, href }) => (
@@ -111,7 +120,12 @@ export function HashLink({
   type?: string;
 }) {
   return (
-    <Link className="hash" href={`/${type}/${value}`} title={value}>
+    <Link
+      prefetch={false}
+      className="hash"
+      href={`/${type}/${value}`}
+      title={value}
+    >
       {short(value)}
     </Link>
   );
@@ -119,28 +133,52 @@ export function HashLink({
 export function Blocks({ blocks }: { blocks: any[] }) {
   return (
     <div className="table-wrap">
-      <table>
+      <table className="data-table blocks-table">
         <thead>
           <tr>
             <th>Height</th>
             <th>Block hash</th>
-            <th>Time (UTC)</th>
+            <th>Time</th>
+            <th>Age</th>
             <th>Transactions</th>
+            <th className="numeric">Size</th>
+            <th>Miner payout</th>
           </tr>
         </thead>
         <tbody>
           {blocks.map((b) => (
             <tr key={b.id}>
               <td>
-                <Link className="height" href={'/block/' + b.height}>
+                <Link
+                  prefetch={false}
+                  className="height"
+                  href={'/block/' + b.height}
+                >
                   {Number(b.height).toLocaleString('en-US')}
                 </Link>
               </td>
               <td>
                 <HashLink value={b.id} />
               </td>
-              <td className="mono muted">{date(b.time).replace(' UTC', '')}</td>
+              <td className="mono muted">
+                <Time seconds={Number(b.time)} />
+              </td>
+              <td className="muted">
+                <Time seconds={Number(b.time)} relative />
+              </td>
               <td>{b.txs}</td>
+              <td className="numeric">
+                {b.byteLength == null
+                  ? '—'
+                  : b.byteLength.toLocaleString('en-US') + ' B'}
+              </td>
+              <td>
+                {b.miner ? (
+                  <HashLink type="address" value={b.miner} />
+                ) : (
+                  <span className="muted">Indexing</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -175,7 +213,11 @@ export function Transactions({ transactions }: { transactions: any[] }) {
                 {tx.height === null ? (
                   <span className="state planned">Pending</span>
                 ) : (
-                  <Link className="height" href={'/block/' + tx.height}>
+                  <Link
+                    prefetch={false}
+                    className="height"
+                    href={'/block/' + tx.height}
+                  >
                     {Number(tx.height).toLocaleString('en-US')}
                   </Link>
                 )}
@@ -193,7 +235,7 @@ export function Failure({ error }: { error: any }) {
     <>
       <Header />
       <main className="explorer-page">
-        <Link className="text-link" href="/">
+        <Link prefetch={false} className="text-link" href="/">
           ← Explorer
         </Link>
         <h1>

@@ -1,6 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { parse } from 'lossless-json';
-const methods = new Set(['getinfo', 'getblock', 'gettx', 'history', 'utxos']);
+const methods = new Set([
+  'getinfo',
+  'getblock',
+  'gettx',
+  'history',
+  'utxos',
+  'getrawmempool',
+]);
 // the mining pool's public JSON-RPC: read-only statistics, no token
 const poolMethods = new Set(['poolstats', 'minerstats']);
 // The background snapshot (instrumentation.ts) runs inside `background`: visitors get 9 of the 12

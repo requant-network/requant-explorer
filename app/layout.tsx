@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
 import './signal.css';
+import './workspace.css';
+import { ExplorerPreferences } from '../src/workspace';
 
 // Preloaded with a metric-matched Arial fallback, so text does not reflow when the font arrives.
 const plex = localFont({
@@ -27,7 +29,9 @@ export const metadata: Metadata = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={plex.variable}>
-      <body>{children}</body>
+      <body>
+        <ExplorerPreferences>{children}</ExplorerPreferences>
+      </body>
     </html>
   );
 }

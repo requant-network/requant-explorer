@@ -21,6 +21,11 @@ const originalFetch = globalThis.fetch,
   originalNow = Date.now;
 function block(height) {
   const bytes = Buffer.alloc(388);
+  if (height > 0)
+    Buffer.from(
+      hash((fork && height - 1 === 2 ? 100 : 0) + height - 1),
+      'hex'
+    ).copy(bytes, 12);
   bytes.writeBigUInt64LE(123n, 116);
   bytes.writeUInt32LE(7, 124);
   return {
@@ -63,7 +68,7 @@ test('live snapshots, large balances, orphan status and cached outage state', as
       result = {
         txid: params[0],
         coinbase: true,
-        height: 1,
+        height: Number(BigInt('0x' + params[0])) - 1000,
         confirmations: 2,
         fee: '0',
         hex: '00',
@@ -139,6 +144,7 @@ test('live snapshots, large balances, orphan status and cached outage state', as
 });
 
 test('fresh rates remain visible before the historical index reaches the tip', async () => {
+  fork = false;
   const oldDirectory = process.env.DATA_DIR;
   process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'requant-index-lag-test-'));
   const currentHeight = 8040;

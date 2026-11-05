@@ -1,19 +1,35 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Search, Blocks, Transactions } from '../src/ui';
-import { amount, rate, date, short } from '../src/format.mjs';
+import { Search, Blocks } from '../src/ui';
+import { amount, rate } from '../src/format.mjs';
+import { WorkspaceNav, TransactionRows } from '../src/records';
+import { Time } from '../src/workspace';
+import ActivityChart from '../src/activity-chart';
 export default function Overview({ initial }: { initial: any }) {
   const [data, setData] = useState(initial),
-    [tab, setTab] = useState('blocks');
+    [next, setNext] = useState<any>(null),
+    [tab, setTab] = useState('blocks'),
+    [enabled, setEnabled] = useState(true);
   useEffect(() => {
-    let stopped = false;
+    if (!enabled) return;
+    let stopped = false,
+      busy = false;
+    const abort = new AbortController();
     const timer = setInterval(async () => {
+      if (document.hidden || busy) return;
+      busy = true;
       try {
-        const r = await fetch('/explorer/api/overview', { cache: 'no-store' });
+        const r = await fetch('/explorer/api/overview', {
+          cache: 'no-store',
+          signal: abort.signal,
+        });
         if (!r.ok) throw new Error();
-        const next = await r.json();
-        if (!stopped) setData(next);
+        const value = await r.json();
+        if (!stopped) {
+          if (data.tip && value.tip && value.tip !== data.tip) setNext(value);
+          else setData(value);
+        }
       } catch {
         if (!stopped)
           setData((old: any) => ({
@@ -22,34 +38,27 @@ export default function Overview({ initial }: { initial: any }) {
             stale: true,
             error: 'The explorer connection is unavailable.',
           }));
+      } finally {
+        busy = false;
       }
     }, 30000);
     return () => {
       stopped = true;
+      abort.abort();
       clearInterval(timer);
     };
-  }, []);
-  const connected = data.observedAt !== null,
-    series = data.series,
-    values = series.filter((s: any) => s.rate !== null).map((s: any) => s.rate),
-    max = Math.max(...values, 1),
-    min = Math.min(...values, 0);
-  const points = series
-    .map((s: any, i: number) =>
-      s.rate === null
-        ? ''
-        : `${i === 0 || series[i - 1].rate === null ? 'M' : 'L'}${((s.time - series[0].time) * 900) / Math.max(1, series.at(-1).time - series[0].time)},${180 - ((s.rate - min) / (max - min || 1)) * 140}`
-    )
-    .join(' ');
+  }, [enabled, data.tip]);
+  const connected = data.observedAt != null;
   return (
-    <main className="explorer-page">
+    <main className="explorer-page workspace-page">
+      <WorkspaceNav />
       <div className="explorer-heading">
         <div>
           <div className="eyebrow">TNet v1 / Public testnet</div>
           <h1>
             Network explorer<span className="period">.</span>
           </h1>
-          <p>Follow every block. Verify every transaction.</p>
+          <p>Follow blocks, trace transactions and inspect addresses.</p>
         </div>
         <span
           className={
@@ -68,129 +77,140 @@ export default function Overview({ initial }: { initial: any }) {
         </span>
       </div>
       <Search />
+      <div className="workspace-refresh">
+        <span>
+          {connected ? (
+            <>
+              Observed <Time seconds={data.observedAt / 1000} />
+            </>
+          ) : (
+            'Waiting for node data'
+          )}
+        </span>
+        <label>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />{' '}
+          Check for updates
+        </label>
+      </div>
+      {next && (
+        <button
+          className="button primary new-records"
+          onClick={() => {
+            setData(next);
+            setNext(null);
+          }}
+        >
+          New chain data available · Show updates
+        </button>
+      )}
       {data.stalled && (
         <div className="notice warning" role="status">
-          No new blocks observed for over 20 minutes. Testnet mining may be
-          inactive. Last block: {date(data.latestBlockTime)}. Confirmations and
-          payouts wait for new blocks.
+          No new blocks observed for over 20 minutes. Last block:{' '}
+          <Time seconds={data.latestBlockTime} />. Confirmations and payouts
+          wait for new blocks.
         </div>
       )}
       {data.error && (
         <div className="notice warning" role="status">
-          {data.error}
-          {data.observedAt && (
+          {data.error}{' '}
+          {connected && (
             <>
-              {' '}
-              Last successful update:{' '}
-              {new Date(data.observedAt)
-                .toISOString()
-                .replace('T', ' ')
-                .slice(0, 19)}{' '}
-              UTC.
+              Last successful update: <Time seconds={data.observedAt / 1000} />.
             </>
           )}
         </div>
       )}
-      <section className="network-stats">
+      <section className="workspace-summary" aria-label="Network summary">
         <div>
           <span>Block height</span>
           <strong>
-            {connected ? data.height.toLocaleString('en-US') : '—'}
+            {connected ? Number(data.height).toLocaleString('en-US') : '—'}
           </strong>
           <small>
-            {connected ? short(data.tip, 7) : 'Awaiting node connection'}
+            Last block:{' '}
+            {connected ? (
+              <Time seconds={data.latestBlockTime} relative />
+            ) : (
+              'Unavailable'
+            )}
           </small>
         </div>
         <div>
           <span>Estimated network rate</span>
-          <strong>
+          <strong style={{ fontSize: '21px' }}>
             {connected ? rate(data.estimatedTicketsPerSecond) : '—'}
           </strong>
           <small>
-            {connected
-              ? data.stalled
-                ? 'Unavailable until new blocks arrive'
-                : `${data.rateWindow} block window`
-              : 'Measured from block targets'}
+            {data.stalled
+              ? 'Unavailable until new blocks arrive'
+              : (data.rateWindow || 0) + ' block window'}
           </small>
         </div>
         <div>
-          <span>Issued testnet coins</span>
+          <span>Average block interval</span>
           <strong>
-            {connected ? amount(data.issuedAtoms) : '—'} <em>RQT</em>
+            {connected && data.averageBlockSeconds != null
+              ? Math.round(data.averageBlockSeconds) + ' s'
+              : '—'}
           </strong>
-          <small>Continuous issuance with tail emission</small>
+          <small>Target: 60 seconds</small>
         </div>
         <div>
-          <span>Known nodes</span>
-          <strong>{connected ? (data.knownNodes ?? data.peers) : '—'}</strong>
+          <span>Pending transactions</span>
+          <strong>
+            {connected ? (
+              <Link prefetch={false} href="/transactions?kind=pending">
+                {data.mempool}
+              </Link>
+            ) : (
+              '—'
+            )}
+          </strong>
+          <small>Observed node’s mempool</small>
+        </div>
+        <div>
+          <span>TNet epoch</span>
+          <strong>{connected ? data.epoch : '—'}</strong>
           <small>
             {connected
-              ? `${data.peers} connected to the observed node · ${data.mempool} pending transactions`
-              : 'Address book of the observed node'}
+              ? data.epochRemaining + ' blocks to next epoch'
+              : '1440 blocks per epoch'}
           </small>
-        </div>
-      </section>
-      <section className="rate-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Network activity</h2>
-            <span className="muted">
-              Estimated tickets/s · Collected by this explorer
-            </span>
-          </div>
-          <span className="state">24 h history</span>
-        </div>
-        {values.length > 1 ? (
-          <div className="chart">
-            <svg
-              viewBox="0 0 900 200"
-              role="img"
-              aria-label="Estimated ticket rate over the last 24 hours"
-              preserveAspectRatio="none"
-            >
-              {[40, 90, 140, 190].map((y) => (
-                <line
-                  key={y}
-                  x1="0"
-                  x2="900"
-                  y1={y}
-                  y2={y}
-                  stroke="#ddd8cf"
-                  strokeDasharray="4 5"
-                />
-              ))}
-              <path
-                d={points}
-                fill="none"
-                stroke="#ff5426"
-                strokeWidth="2"
-                vectorEffect="non-scaling-stroke"
+          {connected && (
+            <div className="epoch-progress">
+              <span
+                style={{
+                  width: (100 * (1440 - data.epochRemaining)) / 1440 + '%',
+                }}
               />
-            </svg>
-            <div className="chart-scale">
-              <span>
-                {new Date(series[0].time).toISOString().slice(11, 16)} UTC
-              </span>
-              <span>{rate(max)}</span>
-              <span>
-                {new Date(series.at(-1).time).toISOString().slice(11, 16)} UTC
-              </span>
             </div>
-          </div>
-        ) : (
-          <div className="chart-empty">
-            <span className="chart-symbol">▥</span>
-            <p>
-              {data.stalled
-                ? 'No recent blocks. A current network rate cannot be estimated.'
-                : connected
-                  ? 'Collecting network activity. The chart appears after two measurements.'
-                  : 'Network activity appears when the node is connected.'}
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </section>
+      <div className="overview-secondary">
+        <span>
+          Issued testnet coins{' '}
+          <strong>{connected ? amount(data.issuedAtoms) + ' RQT' : '—'}</strong>
+        </span>
+        <span>
+          Connected peers <strong>{connected ? data.peers : '—'}</strong>
+        </span>
+        <span>
+          Known nodes{' '}
+          <strong>
+            {connected ? (data.knownNodes ?? 'Unavailable') : '—'}
+          </strong>{' '}
+          · observed node only
+        </span>
+        <span>
+          Node <strong>{data.nodeVersion || '—'}</strong>
+        </span>
+      </div>
+      <ActivityChart observedAt={data.observedAt || 0} />
       <section className="records-panel">
         <div className="panel-heading">
           <div className="record-tabs">
@@ -207,8 +227,12 @@ export default function Overview({ initial }: { initial: any }) {
               Latest transactions
             </button>
           </div>
-          <Link className="text-link" href="/blocks">
-            All blocks ↗
+          <Link
+            prefetch={false}
+            className="text-link"
+            href={tab === 'blocks' ? '/blocks' : '/transactions'}
+          >
+            View all →
           </Link>
         </div>
         {!connected ? (
@@ -218,28 +242,15 @@ export default function Overview({ initial }: { initial: any }) {
         ) : tab === 'blocks' ? (
           <Blocks blocks={data.blocks} />
         ) : (
-          <Transactions transactions={data.transactions} />
+          <TransactionRows transactions={data.transactions} />
         )}
       </section>
-      <div className="explorer-notes">
-        <p>
-          <span className="status-dot" />{' '}
-          {connected
-            ? `Observed ${new Date(data.observedAt).toISOString().slice(11, 19)} UTC · Node ${data.nodeVersion}`
-            : 'Read-only testnet explorer'}
-        </p>
-        <p>
-          {connected
-            ? `Block hash index: ${Number(data.indexHeight).toLocaleString('en-US')} / ${data.height.toLocaleString('en-US')}`
-            : 'Search supports testnet addresses beginning with trq1.'}
-        </p>
-      </div>
-      <div className="notice">
-        Testnet coins have no value. Network rate is an estimate from block
-        targets and timestamps; known nodes are the observed node's address book
-        and the node itself, connections are its own peers. Gaps in the chart
-        mean the rate was unavailable.
-      </div>
+      <p className="notice">
+        Testnet coins have no value. Rate is an estimate in tickets/s. Peer and
+        address-book counts describe this node. Indexed block hashes:{' '}
+        {Number(data.indexHeight || 0).toLocaleString('en-US')} /{' '}
+        {Number(data.height || 0).toLocaleString('en-US')}.
+      </p>
     </main>
   );
 }

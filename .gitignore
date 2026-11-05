@@ -12,3 +12,5 @@ coverage/
 data/
 
 next-env.d.ts
+output/
+.playwright-cli/
