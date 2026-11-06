@@ -56,10 +56,12 @@ export default async function Connect({
                   className="text-link"
                   href="https://github.com/danifest751/CPPminer/releases/latest"
                 >
-                  Windows / Linux release ↗
+                  Windows / Linux / Android release ↗
                 </a>
                 . NVIDIA CUDA requires a compatible tensor-core GPU; AMD / Intel
-                use OpenCL. See the release requirements for your device.
+                use OpenCL. Android phones mine on the CPU, far more slowly: use
+                the Linux command below with the NVIDIA option, which adds no
+                backend flag. See the release requirements for your device.
               </li>
             </ol>
             <MiningSetup endpoint={poolEndpoint()} initial={initial} />
